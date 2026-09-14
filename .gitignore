@@ -1,0 +1,25 @@
+# Segredos — NUNCA comitar
+config/.env
+*.env
+!config/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Modelos de voz baixados
+.cache/whisper/
+*.pth
+
+# Sistema
+.DS_Store
+*.log
