@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Odds de Hold'em</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: mesa de feltro à esquerda (cartas + seletor), painel de números à direita; empilha no celular. */
+:root {
+  --bg: #eef1ec;
+  --surface: #f9fbf7;
+  --ink: #16201a;
+  --muted: #586a5e;
+  --line: #d2dbd1;
+  --felt: #1d5a41;
+  --felt-deep: #134430;
+  --felt-ink: #eef6f0;
+  --felt-muted: #a9cdb8;
+  --gold: #a87918;
+  --win: #2c7a4c;
+  --tie: #b08422;
+  --loss: #ad3f3b;
+  --cardface: #fdfcf7;
+  --cardedge: #c9cfc6;
+  --s-spade: #1b211d;
+  --s-heart: #c42f2b;
+  --s-diamond: #2356b5;
+  --s-club: #23783a;
+  --focus: #2356b5;
+  --display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1a14; --surface: #14251c; --ink: #e5ece6; --muted: #92a699; --line: #24392d;
+    --felt: #18503a; --felt-deep: #0f3526; --felt-ink: #eef6f0; --felt-muted: #93bda5;
+    --gold: #d8a947; --win: #4caf73; --tie: #d1a23e; --loss: #d9645f;
+    --cardface: #eceae2; --cardedge: #3a4f42; --focus: #7fb0ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1a14; --surface: #14251c; --ink: #e5ece6; --muted: #92a699; --line: #24392d;
+  --felt: #18503a; --felt-deep: #0f3526; --felt-ink: #eef6f0; --felt-muted: #93bda5;
+  --gold: #d8a947; --win: #4caf73; --tie: #d1a23e; --loss: #d9645f;
+  --cardface: #eceae2; --cardedge: #3a4f42; --focus: #7fb0ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { padding-block: 28px 12px; }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 7vw, 64px); line-height: .95; margin: 4px 0 8px; letter-spacing: .01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 22px; letter-spacing: .02em; margin: 0; line-height: 1.1; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; padding-block: 12px 40px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* Mesa */
+.table {
+  background: radial-gradient(ellipse at 50% 35%, var(--felt) 0%, var(--felt-deep) 100%);
+  color: var(--felt-ink); border-radius: 22px; padding: 20px 18px; display: flex; flex-direction: column; gap: 16px;
+  box-shadow: inset 0 0 0 6px color-mix(in srgb, var(--felt-deep) 70%, black), inset 0 0 0 7px color-mix(in srgb, var(--gold) 45%, transparent);
+}
+.trow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.tlabel { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--felt-muted); width: 72px; flex: none; }
+.slots { display: flex; gap: 8px; flex-wrap: wrap; }
+.slot {
+  width: 52px; aspect-ratio: 5 / 7; max-width: 100%; border-radius: 7px; border: 1.5px dashed color-mix(in srgb, var(--felt-ink) 40%, transparent);
+  background: color-mix(in srgb, black 12%, transparent); color: var(--felt-muted); font: 500 10px/1.1 var(--mono); letter-spacing: .06em; text-transform: uppercase;
+  display: grid; place-items: center; cursor: pointer; padding: 0; transition: transform .12s ease, border-color .12s ease;
+}
+.slot:hover { border-color: var(--felt-ink); }
+.slot.active { border: 2px solid var(--gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 30%, transparent); }
+.slot.filled { border: none; background: none; }
+.slot.filled.active .cardface { outline: 2px solid var(--gold); outline-offset: 2px; }
+.slot.gap { margin-left: 8px; }
+.cardface {
+  width: 100%; height: 100%; border-radius: 7px; background: var(--cardface); border: 1px solid var(--cardedge);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; box-shadow: 0 2px 4px rgba(0,0,0,.25);
+}
+.cardface .r { font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1; }
+.cardface .u { font-size: 20px; line-height: 1; }
+.s-0 { color: var(--s-spade); } .s-1 { color: var(--s-heart); } .s-2 { color: var(--s-diamond); } .s-3 { color: var(--s-club); }
+.handtag { font-family: var(--mono); font-size: 12px; color: var(--felt-ink); background: color-mix(in srgb, black 22%, transparent); padding: 3px 9px; border-radius: 999px; }
+.tactions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tbtn { font: 500 13px var(--body); color: var(--felt-ink); background: color-mix(in srgb, black 22%, transparent); border: 1px solid color-mix(in srgb, var(--felt-ink) 25%, transparent); border-radius: 999px; padding: 6px 13px; cursor: pointer; }
+.tbtn:hover { background: color-mix(in srgb, black 35%, transparent); }
+.sample { font-size: 12.5px; color: var(--felt-muted); margin: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Seletor de cartas */
+.pickhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pickhead b { color: var(--ink); }
+.cardgrid { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 4px; }
+.pick {
+  aspect-ratio: 5 / 7; max-width: 100%; border-radius: 5px; border: 1px solid var(--cardedge); background: var(--cardface); cursor: pointer; padding: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--display); font-weight: 800; font-size: clamp(12px, 2.2vw, 17px); line-height: 1;
+}
+.pick span { font-family: var(--body); font-size: .85em; }
+.pick:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 3px 6px rgba(0,0,0,.18); }
+.pick:disabled { opacity: .16; cursor: default; }
+
+/* Adversários */
+.opphead { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.stepper button { width: 36px; height: 34px; border: none; background: none; color: var(--ink); font-size: 18px; cursor: pointer; }
+.stepper button:hover:not(:disabled) { background: var(--line); }
+.stepper button:disabled { opacity: .3; cursor: default; }
+.stepper output { min-width: 30px; text-align: center; font: 600 15px var(--mono); }
+.opplist { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.opp { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.opp .name { font-size: 12.5px; color: var(--muted); flex: 1; min-width: 0; }
+.opp .name b { display: block; color: var(--ink); font-weight: 600; font-size: 13px; }
+.opp .slot { width: 34px; border-color: var(--cardedge); background: none; color: var(--muted); font-size: 9px; }
+.opp .slot .r { font-size: 16px; } .opp .slot .u { font-size: 13px; }
+
+/* Resultado */
+.result .bignum { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.big { font-family: var(--display); font-weight: 800; font-size: clamp(64px, 11vw, 96px); line-height: .9; font-variant-numeric: tabular-nums; }
+.big small { font-size: .45em; }
+.verdict { font-size: 13px; padding: 3px 10px; border-radius: 999px; border: 1px solid currentColor; font-weight: 600; }
+.bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--line); }
+.bar span { display: block; height: 100%; transition: width .25s ease; }
+.bar .w { background: var(--win); } .bar .t { background: var(--tie); } .bar .l { background: var(--loss); }
+.wtl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.wtl div { display: flex; flex-direction: column; }
+.wtl dt { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.wtl dt::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--dot); }
+.wtl dd { margin: 0; font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
+.meta { margin: 0; font: 12px var(--mono); color: var(--muted); }
+.cats { display: flex; flex-direction: column; gap: 6px; }
+.catrow { display: grid; grid-template-columns: 112px minmax(0, 1fr) 58px; align-items: center; gap: 10px; font-size: 13px; }
+.catrow .track { display: block; height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.catrow .fill { display: block; height: 100%; background: var(--felt); border-radius: 999px; transition: width .25s ease; }
+.catrow .pct { font: 12.5px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.catrow.zero { color: var(--muted); }
+.outsum { display: flex; gap: 20px; flex-wrap: wrap; }
+.stat { display: flex; flex-direction: column; }
+.stat .v { font: 600 26px var(--mono); font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.outgroup { display: flex; flex-direction: column; gap: 6px; }
+.outgroup .gname { font-size: 13px; font-weight: 600; }
+.outgroup .gname span { color: var(--muted); font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 600 13px var(--mono); background: var(--cardface); border: 1px solid var(--cardedge); border-radius: 4px; padding: 1px 5px; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.fields input { font: 600 16px var(--mono); padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); width: 100%; }
+.potline { margin: 0; font-size: 14px; }
+.potline b { font-family: var(--mono); }
+.potline span b { font-family: var(--body); }
+.good { color: var(--win); } .bad { color: var(--loss); } .even { color: var(--tie); }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 65ch; }
+@media (max-width: 420px) {
+  .slot { width: 46px; } .tlabel { width: 100%; }
+  .catrow { grid-template-columns: 96px minmax(0, 1fr) 52px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Texas Hold'em · No-limit</p>
+    <h1>Odds de Hold'em</h1>
+    <p class="lede">Escolha suas cartas e as da mesa. A calculadora simula dezenas de milhares de mãos e mostra sua chance real de levar o pote, seus outs e se vale pagar a aposta.</p>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <section class="col" aria-label="Mesa e cartas">
+    <div class="table">
+      <div class="trow">
+        <span class="tlabel">Sua mão</span>
+        <div class="slots" id="heroSlots"></div>
+        <span class="handtag" id="handTag" hidden></span>
+      </div>
+      <div class="trow">
+        <span class="tlabel">Mesa</span>
+        <div class="slots" id="boardSlots"></div>
+      </div>
+      <div class="tactions">
+        <button class="tbtn" id="dealNext" type="button">Sortear próxima carta da mesa</button>
+        <button class="tbtn" id="clearBoard" type="button">Limpar mesa</button>
+        <button class="tbtn" id="clearAll" type="button">Limpar tudo</button>
+      </div>
+      <p class="sample" id="sample">Exemplo carregado: A♠ K♠ contra 2 adversários num flop Q♠ J♥ 4♠. Toque numa carta para trocar.</p>
+    </div>
+
+    <div class="panel">
+      <div class="pickhead">
+        <h2>Baralho</h2>
+        <span class="hint">Escolhendo: <b id="activeName">—</b></span>
+      </div>
+      <div class="cardgrid" id="grid" role="group" aria-label="Baralho"></div>
+      <p class="hint">Toque num espaço da mesa para escolher onde a carta vai. Tocar numa carta já colocada tira ela de lá.</p>
+    </div>
+
+    <div class="panel">
+      <div class="opphead">
+        <h2>Adversários</h2>
+        <div class="stepper">
+          <button type="button" id="oppMinus" aria-label="Menos um adversário">−</button>
+          <output id="oppN" aria-live="polite">2</output>
+          <button type="button" id="oppPlus" aria-label="Mais um adversário">+</button>
+        </div>
+      </div>
+      <p class="hint">Em branco, o adversário recebe cartas aleatórias. Se você leu a mão de alguém, toque nos espaços dele e escolha as cartas.</p>
+      <div class="opplist" id="oppList"></div>
+    </div>
+  </section>
+
+  <section class="col" aria-label="Resultados">
+    <div class="panel result">
+      <p class="eyebrow">Sua equity</p>
+      <div class="bignum">
+        <div class="big" id="eqBig">—</div>
+        <span class="verdict" id="eqVerdict" hidden></span>
+      </div>
+      <div class="bar" aria-hidden="true"><span class="w" id="barW"></span><span class="t" id="barT"></span><span class="l" id="barL"></span></div>
+      <dl class="wtl">
+        <div style="--dot: var(--win)"><dt>Vitória</dt><dd id="pW">—</dd></div>
+        <div style="--dot: var(--tie)"><dt>Empate</dt><dd id="pT">—</dd></div>
+        <div style="--dot: var(--loss)"><dt>Derrota</dt><dd id="pL">—</dd></div>
+      </dl>
+      <p class="meta" id="meta">Escolha suas duas cartas para começar.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Como sua mão termina</h2>
+      <p class="hint">Chance de cada jogo até o river.</p>
+      <div class="cats" id="cats"></div>
+    </div>
+
+    <div class="panel" id="outsPanel">
+      <h2>Outs</h2>
+      <div id="outsBody"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Pot odds</h2>
+      <p class="hint">Informe o pote já com a aposta do adversário e quanto custa pagar.</p>
+      <div class="fields">
+        <label for="pot">Pote atual (fichas)<input id="pot" type="number" min="0" step="1" value="100" inputmode="decimal"></label>
+        <label for="call">Valor para pagar<input id="call" type="number" min="0" step="1" value="50" inputmode="decimal"></label>
+      </div>
+      <p class="potline" id="potNeed"></p>
+      <p class="potline" id="potVerdict"></p>
+    </div>
+
+    <p class="note">Os números vêm de simulação Monte Carlo: o app distribui as cartas desconhecidas aleatoriamente milhares de vezes e conta os resultados. A margem de erro aparece abaixo da equity. Empates dividem o pote, por isso contam como fração na equity.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const RANK_CH = '23456789TJQKA';
+  const RANK_LABEL = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const RANK_NAME = ['dois','três','quatro','cinco','seis','sete','oito','nove','dez','valete','dama','rei','ás'];
+  const SUIT_SYM = ['♠','♥','♦','♣'];
+  const SUIT_NAME = ['espadas','copas','ouros','paus'];
+  const CAT_NAME = ['Carta alta','Um par','Dois pares','Trinca','Sequência','Flush','Full house','Quadra','Straight flush'];
+  const BOARD_LABEL = ['Flop','Flop','Flop','Turn','River'];
+  const MAX_OPP = 9;
+  const rankOf = c => c >> 2, suitOf = c => c & 3;
+  const cardText = c => RANK_LABEL[rankOf(c)] + SUIT_SYM[suitOf(c)];
+  const cardName = c => RANK_NAME[rankOf(c)] + ' de ' + SUIT_NAME[suitOf(c)];
+  const parse = s => RANK_CH.indexOf(s[0]) * 4 + 'shdc'.indexOf(s[1]);
+
+  // ---------- Avaliador de mãos (5 a 7 cartas) ----------
+  const cnt = new Int8Array(13), smask = new Int32Array(4), scount = new Int8Array(4), singles = new Int8Array(7);
+  function straightHigh(mask) {
+    const m = (mask << 1) | ((mask >> 12) & 1);
+    for (let h = 13; h >= 4; h--) if (((m >> (h - 4)) & 31) === 31) return h;
+    return 0;
+  }
+  function evaluate(cards, n) {
+    cnt.fill(0); smask.fill(0); scount.fill(0);
+    let rm = 0;
+    for (let i = 0; i < n; i++) {
+      const c = cards[i], r = c >> 2, s = c & 3;
+      cnt[r]++; smask[s] |= 1 << r; scount[s]++; rm |= 1 << r;
+    }
+    for (let s = 0; s < 4; s++) {
+      if (scount[s] >= 5) {
+        const sf = straightHigh(smask[s]);
+        if (sf) return (8 << 20) | sf;
+        let v = 0, k = 0;
+        for (let r = 12; r >= 0 && k < 5; r--) if ((smask[s] >> r) & 1) { v = (v << 4) | r; k++; }
+        return (5 << 20) | v; // com até 7 cartas, flush exclui quadra e full house
+      }
+    }
+    let quad = -1, t1 = -1, t2 = -1, p1 = -1, p2 = -1, p3 = -1, ns = 0;
+    singles.fill(0);
+    for (let r = 12; r >= 0; r--) {
+      const c = cnt[r];
+      if (c === 4) quad = r;
+      else if (c === 3) { if (t1 < 0) t1 = r; else if (t2 < 0) t2 = r; }
+      else if (c === 2) { if (p1 < 0) p1 = r; else if (p2 < 0) p2 = r; else if (p3 < 0) p3 = r; }
+      else if (c === 1) singles[ns++] = r;
+    }
+    if (quad >= 0) {
+      let k = 0;
+      for (let r = 12; r >= 0; r--) if (r !== quad && cnt[r] > 0) { k = r; break; }
+      return (7 << 20) | (quad << 16) | (k << 12);
+    }
+    if (t1 >= 0 && (t2 >= 0 || p1 >= 0)) return (6 << 20) | (t1 << 16) | (Math.max(t2, p1) << 12);
+    const st = straightHigh(rm);
+    if (st) return (4 << 20) | st;
+    if (t1 >= 0) return (3 << 20) | (t1 << 16) | (singles[0] << 12) | (singles[1] << 8);
+    if (p2 >= 0) return (2 << 20) | (p1 << 16) | (p2 << 12) | (Math.max(p3, ns ? singles[0] : -1) << 8);
+    if (p1 >= 0) return (1 << 20) | (p1 << 16) | (singles[0] << 12) | (singles[1] << 8) | (singles[2] << 4);
+    return (singles[0] << 16) | (singles[1] << 12) | (singles[2] << 8) | (singles[3] << 4) | singles[4];
+  }
+
+  // ---------- Estado ----------
+  const state = {
+    hero: [parse('As'), parse('Ks')],
+    board: [parse('Qs'), parse('Jh'), parse('4s'), null, null],
+    nOpp: 2,
+    opp: Array.from({ length: MAX_OPP }, () => [null, null]),
+    active: 'b3',
+  };
+  let sampleShown = true;
+
+  function getSlot(k) {
+    if (k[0] === 'h') return state.hero[+k[1]];
+    if (k[0] === 'b') return state.board[+k[1]];
+    const [i, j] = k.slice(1).split('_').map(Number);
+    return state.opp[i][j];
+  }
+  function setSlot(k, v) {
+    if (k[0] === 'h') state.hero[+k[1]] = v;
+    else if (k[0] === 'b') state.board[+k[1]] = v;
+    else { const [i, j] = k.slice(1).split('_').map(Number); state.opp[i][j] = v; }
+  }
+  function slotOrder() {
+    const o = ['h0', 'h1', 'b0', 'b1', 'b2', 'b3', 'b4'];
+    for (let i = 0; i < state.nOpp; i++) o.push('o' + i + '_0', 'o' + i + '_1');
+    return o;
+  }
+  function slotName(k) {
+    if (!k) return 'nenhum espaço';
+    if (k[0] === 'h') return 'Sua carta ' + (+k[1] + 1);
+    if (k[0] === 'b') { const i = +k[1]; return i < 3 ? 'Flop ' + (i + 1) : BOARD_LABEL[i]; }
+    const [i, j] = k.slice(1).split('_').map(Number);
+    return 'Adversário ' + (i + 1) + ', carta ' + (j + 1);
+  }
+  function used() {
+    const s = new Set();
+    for (const k of slotOrder()) { const v = getSlot(k); if (v !== null) s.add(v); }
+    return s;
+  }
+  function nextEmpty(after) {
+    const o = slotOrder();
+    const start = after ? o.indexOf(after) + 1 : 0;
+    // continua dentro do mesmo grupo (mão, mesa ou adversário) antes de parar
+    for (let i = start; i < o.length; i++) {
+      if (getSlot(o[i]) === null) {
+        if (!after) return o[i];
+        const grpA = after[0] === 'o' ? after.split('_')[0] : after[0];
+        const grpB = o[i][0] === 'o' ? o[i].split('_')[0] : o[i][0];
+        if (grpA === grpB || (after[0] === 'h' && o[i][0] === 'b')) return o[i];
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // ---------- Renderização da mesa ----------
+  const $ = id => document.getElementById(id);
+  function faceHTML(c) {
+    return '<span class="cardface s-' + suitOf(c) + '"><span class="r">' + RANK_LABEL[rankOf(c)] + '</span><span class="u">' + SUIT_SYM[suitOf(c)] + '</span></span>';
+  }
+  function slotHTML(k, label, extra) {
+    const v = getSlot(k);
+    const cls = ['slot', v !== null ? 'filled' : '', state.active === k ? 'active' : '', extra || ''].join(' ').trim();
+    const aria = v !== null ? slotName(k) + ': ' + cardName(v) + '. Tocar para remover' : slotName(k) + ': vazio';
+    return '<button type="button" class="' + cls + '" data-slot="' + k + '" aria-label="' + aria + '">' + (v !== null ? faceHTML(v) : label) + '</button>';
+  }
+  function heroTag() {
+    const [a, b] = state.hero;
+    if (a === null || b === null) return '';
+    const hi = Math.max(rankOf(a), rankOf(b)), lo = Math.min(rankOf(a), rankOf(b));
+    const boardK = state.board.filter(x => x !== null);
+    let tag = hi === lo ? RANK_CH[hi] + RANK_CH[lo] : RANK_CH[hi] + RANK_CH[lo] + (suitOf(a) === suitOf(b) ? 's' : 'o');
+    if (boardK.length >= 3) {
+      const arr = [a, b, ...boardK];
+      const sc = evaluate(arr, arr.length);
+      const cat = sc >> 20;
+      tag += ' · ' + (cat === 8 && (sc & 15) === 13 ? 'Royal flush' : CAT_NAME[cat]);
+    }
+    return tag;
+  }
+  function renderTable() {
+    $('heroSlots').innerHTML = slotHTML('h0', 'Carta 1') + slotHTML('h1', 'Carta 2');
+    $('boardSlots').innerHTML = [0, 1, 2, 3, 4].map(i => slotHTML('b' + i, BOARD_LABEL[i], i >= 3 ? 'gap' : '')).join('');
+    const tag = heroTag();
+    $('handTag').hidden = !tag;
+    $('handTag').textContent = tag;
+    $('sample').hidden = !sampleShown;
+    $('activeName').textContent = slotName(state.active);
+    $('oppN').textContent = state.nOpp;
+    $('oppMinus').disabled = state.nOpp <= 1;
+    $('oppPlus').disabled = state.nOpp >= MAX_OPP;
+    let html = '';
+    for (let i = 0; i < state.nOpp; i++) {
+      const known = state.opp[i].some(x => x !== null);
+      html += '<div class="opp"><span class="name"><b>Adv. ' + (i + 1) + '</b>' + (known ? 'mão definida' : 'aleatório') + '</span>' +
+        slotHTML('o' + i + '_0', '?') + slotHTML('o' + i + '_1', '?') + '</div>';
+    }
+    $('oppList').innerHTML = html;
+    const u = used();
+    let g = '';
+    for (let s = 0; s < 4; s++) for (let r = 12; r >= 0; r--) {
+      const c = r * 4 + s;
+      g += '<button type="button" class="pick s-' + s + '" data-c="' + c + '"' + (u.has(c) || !state.active ? ' disabled' : '') +
+        ' aria-label="' + cardName(c) + '">' + RANK_LABEL[r] + '<span>' + SUIT_SYM[s] + '</span></button>';
+    }
+    $('grid').innerHTML = g;
+  }
+
+  function changed() { sampleShown = false; renderTable(); schedule(); }
+
+  document.addEventListener('click', e => {
+    const slot = e.target.closest('[data-slot]');
+    if (slot) {
+      const k = slot.dataset.slot;
+      if (getSlot(k) !== null) { setSlot(k, null); state.active = k; changed(); }
+      else { state.active = k; renderTable(); }
+      return;
+    }
+    const pick = e.target.closest('[data-c]');
+    if (pick && !pick.disabled && state.active) {
+      const k = state.active;
+      setSlot(k, +pick.dataset.c);
+      state.active = nextEmpty(k);
+      changed();
+    }
+  });
+  $('oppMinus').onclick = () => {
+    if (state.nOpp <= 1) return;
+    state.nOpp--; state.opp[state.nOpp] = [null, null];
+    if (state.active && state.active[0] === 'o' && +state.active.slice(1).split('_')[0] >= state.nOpp) state.active = nextEmpty();
+    changed();
+  };
+  $('oppPlus').onclick = () => { if (state.nOpp < MAX_OPP) { state.nOpp++; changed(); } };
+  $('clearBoard').onclick = () => { state.board = [null, null, null, null, null]; state.active = state.hero.includes(null) ? nextEmpty() : 'b0'; changed(); };
+  $('clearAll').onclick = () => {
+    state.hero = [null, null]; state.board = [null, null, null, null, null];
+    state.opp = Array.from({ length: MAX_OPP }, () => [null, null]);
+    state.active = 'h0'; changed();
+  };
+  $('dealNext').onclick = () => {
+    const i = state.board.indexOf(null);
+    if (i < 0) return;
+    const u = used();
+    const free = []; for (let c = 0; c < 52; c++) if (!u.has(c)) free.push(c);
+    // vira o flop inteiro de uma vez quando a mesa está vazia
+    const n = i === 0 ? 3 : 1;
+    for (let t = 0; t < n; t++) {
+      const j = state.board.indexOf(null);
+      if (j < 0) break;
+      const pickI = Math.floor(Math.random() * free.length);
+      state.board[j] = free.splice(pickI, 1)[0];
+    }
+    if (state.active && getSlot(state.active) !== null) state.active = nextEmpty();
+    changed();
+  };
+
+  // ---------- Simulação ----------
+  let seed = (Math.random() * 4294967295) >>> 0 || 1;
+  function rnd() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; }
+  const fmtPct = (x, d = 1) => (x * 100).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }) + '%';
+  const fmtInt = x => x.toLocaleString('pt-BR');
+
+  let runId = 0, timer = 0, lastEquity = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(run, 90); renderOuts(); }
+
+  function run() {
+    const id = ++runId;
+    const [h0, h1] = state.hero;
+    if (h0 === null || h1 === null) { showEmpty(); return; }
+    const boardK = state.board.filter(x => x !== null);
+    const opps = state.opp.slice(0, state.nOpp).map(o => o.slice());
+    const u = used();
+    const deck = []; for (let c = 0; c < 52; c++) if (!u.has(c)) deck.push(c);
+    const randomCount = (5 - boardK.length) + opps.flat().filter(x => x === null).length;
+    const total = randomCount === 0 ? 1 : Math.max(20000, Math.min(100000, Math.round(240000 / (state.nOpp + 1))));
+    const work = new Int8Array(deck.length);
+    const hc = new Int8Array(7), oc = new Int8Array(7);
+    hc[0] = h0; hc[1] = h1;
+    const L = deck.length;
+    let done = 0, win = 0, tie = 0, eq = 0;
+    const cats = new Float64Array(9);
+    function chunk() {
+      if (id !== runId) return;
+      const end = Math.min(total, done + 6000);
+      for (; done < end; done++) {
+        work.set(deck);
+        let k = 0;
+        let bi = 0;
+        for (; bi < boardK.length; bi++) { hc[bi + 2] = boardK[bi]; }
+        for (; bi < 5; bi++) {
+          const j = k + ((rnd() * (L - k)) | 0);
+          const t = work[j]; work[j] = work[k]; work[k] = t;
+          hc[bi + 2] = work[k++];
+        }
+        for (let i = 2; i < 7; i++) oc[i] = hc[i];
+        const hs = evaluate(hc, 7);
+        cats[hs >> 20]++;
+        let beaten = false, ties = 0;
+        for (let o = 0; o < opps.length; o++) {
+          for (let p = 0; p < 2; p++) {
+            const kc = opps[o][p];
+            if (kc !== null) oc[p] = kc;
+            else {
+              const j = k + ((rnd() * (L - k)) | 0);
+              const t = work[j]; work[j] = work[k]; work[k] = t;
+              oc[p] = work[k++];
+            }
+          }
+          const os = evaluate(oc, 7);
+          if (os > hs) { beaten = true; break; }
+          if (os === hs) ties++;
+        }
+        if (beaten) continue;
+        if (ties) { tie++; eq += 1 / (ties + 1); } else { win++; eq += 1; }
+      }
+      showResult(done, win, tie, eq, cats, total, randomCount === 0);
+      if (done < total) setTimeout(chunk, 0);
+    }
+    chunk();
+  }
+
+  function showEmpty() {
+    lastEquity = null;
+    $('eqBig').textContent = '—';
+    $('eqVerdict').hidden = true;
+    ['pW', 'pT', 'pL'].forEach(i => $(i).textContent = '—');
+    ['barW', 'barT', 'barL'].forEach(i => $(i).style.width = '0');
+    $('meta').textContent = 'Escolha suas duas cartas para começar.';
+    $('cats').innerHTML = CAT_NAME.map(n => '<div class="catrow zero"><span>' + n + '</span><span class="track"><span class="fill" style="width:0"></span></span><span class="pct">—</span></div>').join('');
+    renderPot();
+  }
+
+  function showResult(n, win, tie, eq, cats, total, exact) {
+    const pw = win / n, pt = tie / n, pl = 1 - pw - pt, e = eq / n;
+    lastEquity = e;
+    const fair = 1 / (state.nOpp + 1);
+    $('eqBig').innerHTML = (e * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '<small>%</small>';
+    const v = $('eqVerdict');
+    v.hidden = false;
+    if (e > fair * 1.15) { v.className = 'verdict good'; v.textContent = 'Acima da média da mesa'; }
+    else if (e < fair * 0.85) { v.className = 'verdict bad'; v.textContent = 'Abaixo da média da mesa'; }
+    else { v.className = 'verdict even'; v.textContent = 'Perto da média da mesa'; }
+    $('pW').textContent = fmtPct(pw); $('pT').textContent = fmtPct(pt); $('pL').textContent = fmtPct(Math.max(0, pl));
+    $('barW').style.width = (pw * 100) + '%'; $('barT').style.width = (pt * 100) + '%'; $('barL').style.width = (Math.max(0, pl) * 100) + '%';
+    const se = Math.sqrt(e * (1 - e) / n) * 196;
+    const fairTxt = 'média justa com ' + (state.nOpp + 1) + ' jogadores: ' + fmtPct(fair);
+    $('meta').textContent = exact
+      ? 'Resultado exato (todas as cartas conhecidas) · ' + fairTxt
+      : fmtInt(n) + (n < total ? ' de ' + fmtInt(total) : '') + ' simulações · margem ±' + se.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' p.p. · ' + fairTxt;
+    let max = 0; for (let i = 0; i < 9; i++) max = Math.max(max, cats[i] / n);
+    let html = '';
+    for (let i = 0; i < 9; i++) {
+      const p = cats[i] / n;
+      html += '<div class="catrow' + (p === 0 ? ' zero' : '') + '"><span>' + CAT_NAME[i] + '</span><span class="track"><span class="fill" style="width:' + (max ? p / max * 100 : 0) + '%"></span></span><span class="pct">' + (p === 0 ? '0%' : p < 0.001 ? '<0,1%' : fmtPct(p)) + '</span></div>';
+    }
+    $('cats').innerHTML = html;
+    renderPot();
+  }
+
+  // ---------- Outs ----------
+  function renderOuts() {
+    const body = $('outsBody');
+    const [h0, h1] = state.hero;
+    const boardK = state.board.filter(x => x !== null);
+    if (h0 === null || h1 === null || (boardK.length !== 3 && boardK.length !== 4)) {
+      body.innerHTML = '<p class="hint">Os outs aparecem no flop e no turn: são as cartas que ainda podem sair e melhoram o seu jogo (sem contar as que melhoram só a mesa).</p>';
+      return;
+    }
+    const base = [h0, h1, ...boardK];
+    const cur = evaluate(base, base.length) >> 20;
+    const u = used();
+    const groups = {}; let outs = 0, unseen = 0;
+    for (let c = 0; c < 52; c++) {
+      if (u.has(c)) continue;
+      unseen++;
+      const withC = [...base, c];
+      const cat = evaluate(withC, withC.length) >> 20;
+      const bc = [...boardK, c];
+      const boardCat = evaluate(bc, bc.length) >> 20;
+      if (cat > cur && cat > boardCat) { (groups[cat] = groups[cat] || []).push(c); outs++; }
+    }
+    const isFlop = boardK.length === 3;
+    const next = outs / unseen;
+    const byRiver = isFlop ? 1 - ((unseen - outs) * (unseen - outs - 1)) / (unseen * (unseen - 1)) : next;
+    let html = '<div class="outsum">' +
+      '<div class="stat"><span class="v">' + outs + '</span><span class="k">outs de ' + unseen + ' cartas</span></div>' +
+      '<div class="stat"><span class="v">' + fmtPct(next) + '</span><span class="k">acertar no ' + (isFlop ? 'turn' : 'river') + '</span></div>' +
+      (isFlop ? '<div class="stat"><span class="v">' + fmtPct(byRiver) + '</span><span class="k">acertar até o river</span></div>' : '') +
+      '</div>';
+    if (outs) {
+      html += '<p class="hint">Regra prática: outs × ' + (isFlop ? '4 = ' + Math.min(100, outs * 4) : '2 = ' + outs * 2) + '% (aproximação do valor exato acima).</p>';
+      Object.keys(groups).sort((a, b) => b - a).forEach(cat => {
+        html += '<div class="outgroup"><span class="gname">' + CAT_NAME[cat] + ' <span>· ' + groups[cat].length + (groups[cat].length === 1 ? ' carta' : ' cartas') + '</span></span><div class="chips">' +
+          groups[cat].sort((a, b) => b - a).map(c => '<span class="chip s-' + suitOf(c) + '">' + cardText(c) + '</span>').join('') + '</div></div>';
+      });
+      html += '<p class="hint">Out melhora o seu jogo, mas não garante a vitória: o adversário também pode melhorar. A equity acima já considera isso.</p>';
+    } else {
+      html += '<p class="hint">Nenhuma carta melhora a categoria do seu jogo agora (' + CAT_NAME[cur].toLowerCase() + ').</p>';
+    }
+    body.innerHTML = html;
+  }
+
+  // ---------- Pot odds ----------
+  function renderPot() {
+    const pot = parseFloat($('pot').value) || 0, call = parseFloat($('call').value) || 0;
+    if (call <= 0) { $('potNeed').textContent = 'Sem custo para pagar: dar check é de graça.'; $('potVerdict').textContent = ''; return; }
+    const need = call / (pot + call);
+    $('potNeed').innerHTML = 'Você paga <b>' + fmtInt(call) + '</b> para disputar <b>' + fmtInt(pot + call) + '</b>. Precisa de pelo menos <b>' + fmtPct(need) + '</b> de equity.';
+    if (lastEquity === null) { $('potVerdict').textContent = ''; return; }
+    const ev = lastEquity * (pot + call) - call;
+    const evTxt = (ev >= 0 ? '+' : '−') + Math.abs(ev).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+    if (lastEquity > need + 0.01) $('potVerdict').innerHTML = '<span class="good"><b>Pagar é lucrativo.</b></span> Sua equity de ' + fmtPct(lastEquity) + ' rende <b>' + evTxt + '</b> fichas em média por decisão.';
+    else if (lastEquity < need - 0.01) $('potVerdict').innerHTML = '<span class="bad"><b>Pagar perde dinheiro.</b></span> Com ' + fmtPct(lastEquity) + ' de equity, o call custa <b>' + evTxt + '</b> fichas em média. Considere largar, a menos que espere ganhar mais nas próximas ruas.';
+    else $('potVerdict').innerHTML = '<span class="even"><b>Decisão no limite.</b></span> Sua equity (' + fmtPct(lastEquity) + ') está quase igual ao necessário. EV ≈ ' + evTxt + ' fichas.';
+  }
+  $('pot').addEventListener('input', renderPot);
+  $('call').addEventListener('input', renderPot);
+
+  renderTable();
+  schedule();
+})();
+</script>
+</body>
+</html>
