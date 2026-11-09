@@ -8,7 +8,8 @@ export interface ChatResponse {
   messages: ChatMessage[];
 }
 
-const BACKEND_URL = "http://localhost:8000";
+// Em produção (Vercel) defina VITE_BACKEND_URL; sem ela, usa o backend local.
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
 
 export async function sendMessage(message: string, history: ChatMessage[]): Promise<ChatResponse> {
   const resp = await fetch(`${BACKEND_URL}/chat`, {
