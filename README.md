@@ -86,6 +86,19 @@ Tudo em português brasileiro, tom direto, sem enrolar.
 
 ---
 
+## 🖥️ Painel de pools (estilo Revert Finance)
+
+A pasta **`painel/`** tem um site separado para explorar pools, acompanhar suas
+posições Uniswap v3 (várias redes EVM) e simular/backtestar faixas — **somente
+leitura**: ele nunca pede assinatura, então dá para deixar a carteira conectada.
+Veja `painel/README.md`.
+
+```bash
+cd painel && npm ci && npm run dev   # http://localhost:5174
+```
+
+---
+
 ## 🔧 Comandos úteis
 
 ```bash
