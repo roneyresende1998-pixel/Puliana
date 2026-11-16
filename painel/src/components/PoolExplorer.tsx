@@ -51,6 +51,7 @@ function DexPools({ onSimular }: Props) {
   async function carregar(q?: string) {
     setLoading(true);
     setErro(null);
+    setPools([]); // nunca mostrar pools de outra rede/DEX enquanto carrega ou se falhar
     try {
       if (q && q.trim()) {
         setPools(await searchPools(q, network === "todas" ? undefined : network));
