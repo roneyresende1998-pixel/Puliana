@@ -2,13 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EVM_CHAINS } from "../lib/chains.ts";
 import { fmtNum, fmtPct, fmtUsd, shortAddr, store } from "../lib/format.ts";
 import type { LpPosition } from "../lib/positions.ts";
-import { fetchPrices } from "../lib/prices.ts";
+import { WRAPPED, fetchPrices } from "../lib/prices.ts";
+import { TokenLink } from "./TokenPanel.tsx";
 import { scanAddress, type ScanResult, type SourceStatus } from "../lib/scanner.ts";
 import { isSuspicious, safeSymbol } from "../lib/spam.ts";
 import type { Wallet } from "./WalletBar.tsx";
 
 type Row = LpPosition & { wallet: string; valueUsd: number | null; feesUsd: number | null; suspeita: boolean };
 type V4Id = { chain: string; id: string };
+
+/** Moeda nativa (endereço zero na v4) → token embrulhado, para buscar dados. */
+const tokAddr = (chainKey: string, a: string) => (/^0x0{40}$/.test(a) ? WRAPPED[chainKey] ?? a : a);
 
 function loadV4Ids(): V4Id[] {
   try { const v = JSON.parse(store.get("v4ids") ?? "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
@@ -157,7 +161,9 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
           return (
             <article className={`posicao card ${r.suspeita ? "suspeita" : ""}`} key={r.key + r.wallet}>
               <header>
-                <strong>{s0} / {s1}</strong>
+                <strong>
+                  <TokenLink network={r.gecko} address={tokAddr(r.chainKey, r.token0.address)} symbol={s0} /> / <TokenLink network={r.gecko} address={tokAddr(r.chainKey, r.token1.address)} symbol={s1} />
+                </strong>
                 {r.fee !== null ? <span className="badge">{fmtPct(r.fee, r.fee < 0.0005 ? 3 : 2)}</span> : null}
                 <span className="badge">{r.protocol}</span>
                 <span className="badge">{r.chainName}</span>

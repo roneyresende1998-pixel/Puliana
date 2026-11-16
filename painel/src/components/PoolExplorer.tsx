@@ -3,6 +3,7 @@ import { fmtPct, fmtUsd, store } from "../lib/format.ts";
 import { fetchDexes, fetchDexPools, fetchNetworks, fetchTopPools, fetchTrendingAll, searchPools, type Pool } from "../lib/gecko.ts";
 import { fetchYields, type YieldPool } from "../lib/llama.ts";
 import REDES_FIXAS from "../lib/networks.json";
+import { TokenLink } from "./TokenPanel.tsx";
 
 type Props = { onSimular: (p: Pool) => void };
 
@@ -119,7 +120,7 @@ function DexPools({ onSimular }: Props) {
           <tbody>
             {lista.map((p) => (
               <tr key={p.id}>
-                <td><strong>{p.base} / {p.quote}</strong></td>
+                <td><strong><TokenLink network={p.network} address={p.baseAddress} symbol={p.base} /> / <TokenLink network={p.network} address={p.quoteAddress} symbol={p.quote} /></strong></td>
                 <td className="muted">{p.dex}</td>
                 {network === "todas" ? <td className="muted">{nomeRede(p.network)}</td> : null}
                 <td className="num">{p.feeTier === null ? "—" : fmtPct(p.feeTier, 2)}</td>

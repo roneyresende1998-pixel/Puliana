@@ -5,7 +5,7 @@ const LLAMA_CHAIN: Record<string, string> = {
   bsc: "bsc", avalanche: "avax", unichain: "unichain", linea: "linea", solana: "solana",
 };
 // Moeda nativa (endereço zero na Uniswap v4) → token "embrulhado" equivalente
-const WRAPPED: Record<string, string> = {
+export const WRAPPED: Record<string, string> = {
   eth: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", arbitrum: "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
   base: "0x4200000000000000000000000000000000000006", optimism: "0x4200000000000000000000000000000000000006",
   unichain: "0x4200000000000000000000000000000000000006", polygon: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270",

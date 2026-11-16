@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { runBacktest, type BacktestResult } from "../lib/backtest.ts";
 import { fmtNum, fmtPct, fmtUsd } from "../lib/format.ts";
 import type { Pool } from "../lib/gecko.ts";
+import { TokenLink } from "./TokenPanel.tsx";
 import { fetchHistory, type History } from "../lib/history.ts";
 import { amountsAt, capitalEfficiency, impermanentLoss, impermanentLossV2, liquidityForValue, poolFeeApr } from "../lib/v3math.ts";
 
@@ -86,7 +87,7 @@ export default function Simulator({ pool }: { pool: Pool | null }) {
   return (
     <section className="sim">
       <div className="card">
-        <h2>Simulador de faixa {pool ? <small>· {pool.base}/{pool.quote} ({pool.dex})</small> : <small>· escolha uma pool no Explorador ou preencha à mão</small>}</h2>
+        <h2>Simulador de faixa {pool ? <small>· <TokenLink network={pool.network} address={pool.baseAddress} symbol={pool.base} />/<TokenLink network={pool.network} address={pool.quoteAddress} symbol={pool.quote} /> ({pool.dex})</small> : <small>· escolha uma pool no Explorador ou preencha à mão</small>}</h2>
         <div className="form">
           <label>Preço atual ({Y} por {X})<input type="number" value={preco} min={0} step="any" onChange={(e) => setPreco(Number(e.target.value))} /></label>
           <label>Depósito (USD)<input type="number" value={deposito} min={0} onChange={(e) => setDeposito(Number(e.target.value))} /></label>
