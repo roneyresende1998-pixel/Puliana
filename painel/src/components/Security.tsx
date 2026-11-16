@@ -16,11 +16,12 @@ export default function Security() {
       <div className="card">
         <h2>🔒 Como este painel protege sua carteira</h2>
         <ul className="check">
-          <li><b>Somente leitura, por construção.</b> O código só consegue pedir à carteira o seu endereço e a rede. Qualquer pedido de assinatura, transação, aprovação de token ou troca de rede é <b>bloqueado antes de chegar à carteira</b> (lista branca em <code>safeWallet.ts</code>, com teste automatizado).</li>
+          <li><b>Somente leitura, por construção.</b> Na carteira EVM (MetaMask, Rabby…) o código só consegue pedir o seu endereço e a rede: assinatura, transação, aprovação de token e troca de rede são <b>bloqueadas antes de chegar à carteira</b> (lista branca em <code>safeWallet.ts</code>, com teste). Na carteira Solana (Phantom, Solflare…) o painel só chama “conectar” e lê a chave pública. Nenhuma função de assinatura existe no código, e um teste automático falha se alguém tentar colocar.</li>
           <li><b>Não precisa conectar.</b> O modo <b>Observar</b> lê qualquer endereço público direto da blockchain. Para acompanhar suas pools no dia a dia, prefira ele: zero permissão concedida.</li>
           <li><b>Nenhuma chave privada, nenhuma seed.</b> O site não tem campo para isso e um teste falha se alguém tentar adicionar. Quem pedir sua seed é golpista — sempre.</li>
-          <li><b>Sem servidor e sem banco de dados.</b> Tudo roda no seu navegador. O único dado salvo é o endereço público que você escolheu observar (no próprio navegador).</li>
-          <li><b>Conexões travadas.</b> A Content-Security-Policy só permite falar com o GeckoTerminal (dados de pools) e os nós públicos PublicNode (blockchain). Scripts externos, iframes e envio de formulários são proibidos — isso barra a maioria dos ataques de injeção.</li>
+          <li><b>Sem banco de dados.</b> Tudo roda no seu navegador. Só ficam salvos (no próprio navegador) os endereços públicos que você escolheu acompanhar. A única peça no servidor é um retransmissor da RPC oficial da Solana (que recusa navegadores), e ele só aceita métodos de <b>consulta</b>. Envio de transação é recusado ali também.</li>
+          <li><b>Conexões travadas.</b> A Content-Security-Policy só permite falar com o GeckoTerminal e o DefiLlama (dados de pools e preços), os nós públicos PublicNode (blockchains EVM) e o retransmissor do próprio site (Solana). Scripts externos, iframes e envio de formulários são proibidos — isso barra a maioria dos ataques de injeção.</li>
+          <li><b>Alerta de token-golpe.</b> Posições com tokens cujo nome traz link ou convite (“visite site X para resgatar”) são marcadas em vermelho e ficam fora do total. Esse é um golpe comum para levar você a um site falso que pede assinatura.</li>
           <li><b>Poucas dependências, versões fixas.</b> Só React em produção; nada de bibliotecas de carteira de terceiros (vetor comum de roubo em ataques de supply-chain).</li>
         </ul>
       </div>

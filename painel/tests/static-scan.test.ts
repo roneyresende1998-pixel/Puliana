@@ -21,7 +21,8 @@ const PROIBIDO = [
 
 test("nenhum arquivo do site contém chamadas de assinatura, aprovação ou injeção de HTML", () => {
   const src = new URL("../src", import.meta.url).pathname;
-  for (const f of files(src)) {
+  const api = new URL("../api", import.meta.url).pathname;
+  for (const f of [...files(src), ...files(api)]) {
     const txt = readFileSync(f, "utf8");
     for (const re of PROIBIDO) assert.ok(!re.test(txt), `${f} contém padrão proibido ${re}`);
   }
@@ -33,6 +34,6 @@ test("fetch só para hosts permitidos", () => {
   for (const f of files(src)) {
     for (const m of readFileSync(f, "utf8").matchAll(/"https:\/\/([a-z0-9.-]+)/g)) hosts.add(m[1]);
   }
-  const permitidos = /(\.publicnode\.com|api\.geckoterminal\.com|scan\.(io|org|com)|etherscan\.io|polygonscan\.com|bscscan\.com|arbiscan\.io|basescan\.org|revoke\.cash|app\.uniswap\.org|www\.geckoterminal\.com)$/;
+  const permitidos = /(\.publicnode\.com|api\.mainnet-beta\.solana\.com|coins\.llama\.fi|yields\.llama\.fi|solscan\.io|www\.orca\.so|raydium\.io|app\.meteora\.ag|pancakeswap\.finance|www\.sushi\.com|aerodrome\.finance|velodrome\.finance|snowtrace\.io|uniscan\.xyz|lineascan\.build|optimistic\.etherscan\.io|api\.geckoterminal\.com|scan\.(io|org|com)|etherscan\.io|polygonscan\.com|bscscan\.com|arbiscan\.io|basescan\.org|revoke\.cash|app\.uniswap\.org|www\.geckoterminal\.com)$/;
   for (const h of hosts) assert.match(h, permitidos, `host não previsto: ${h}`);
 });

@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 
 // Content-Security-Policy: o navegador só deixa o site carregar scripts do
@@ -11,13 +11,20 @@ export const CSP = [
   "style-src 'self'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self' https://api.geckoterminal.com https://*.publicnode.com",
+  "connect-src 'self' https://api.geckoterminal.com https://*.publicnode.com https://coins.llama.fi https://yields.llama.fi",
   "base-uri 'none'",
   "form-action 'none'",
   "object-src 'none'",
   "manifest-src 'self'",
   "upgrade-insecure-requests",
 ].join("; ");
+
+const solProxy: ProxyOptions = {
+  target: "https://api.mainnet-beta.solana.com",
+  changeOrigin: true,
+  rewrite: () => "/",
+  headers: { origin: "", referer: "" },
+};
 
 // Só no build de produção (o servidor de dev do Vite precisa de scripts inline).
 function cspMeta(): Plugin {
@@ -32,6 +39,8 @@ function cspMeta(): Plugin {
 
 export default defineConfig({
   plugins: [react(), cspMeta()],
-  server: { port: 5174 },
+  // Em dev/preview, /api/sol vai direto para a RPC oficial (em produção é a função api/sol.ts)
+  server: { port: 5174, proxy: { "/api/sol": solProxy } },
+  preview: { proxy: { "/api/sol": solProxy } },
   build: { sourcemap: false, modulePreload: { polyfill: false } },
 });

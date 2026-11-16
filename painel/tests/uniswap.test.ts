@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encodeAddress, encodeInt, encodeUint } from "../src/lib/abi.ts";
-import { chainByKey } from "../src/lib/chains.ts";
-import { loadPositions } from "../src/lib/uniswap.ts";
+import { V3_PROTOCOLS } from "../src/lib/chains.ts";
+import { loadProtocolPositions } from "../src/lib/uniswap.ts";
 
 const OWNER = "0x00000000000000000000000000000000000000aa";
 const T0 = "0x82af49447d8a07e3bd95bd0d56f35241523fbab1"; // WETH
@@ -36,8 +36,9 @@ test("lê posições Uniswap v3 de um endereço só com eth_call", async () => {
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }));
   }) as typeof fetch;
 
-  const [p] = await loadPositions(chainByKey("arbitrum"), OWNER, false);
-  assert.equal(p.tokenId, 777n);
+  const proto = V3_PROTOCOLS.find((x) => x.chain === "arbitrum" && x.nome === "Uniswap v3")!;
+  const [p] = await loadProtocolPositions(proto, OWNER, false);
+  assert.equal(p.id, "777");
   assert.equal(p.token0.symbol, "WETH");
   assert.equal(p.token1.symbol, "USDC");
   assert.equal(p.fee, 0.0005);

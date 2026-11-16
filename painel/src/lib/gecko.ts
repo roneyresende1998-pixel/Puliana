@@ -69,7 +69,7 @@ type GtPoolResp = {
 export type PoolSort = "h24_volume_usd_desc" | "h24_tx_count_desc";
 
 export async function fetchTopPools(network: string, page = 1, sort: PoolSort = "h24_volume_usd_desc"): Promise<Pool[]> {
-  if (!/^[a-z0-9_]+$/.test(network)) throw new Error("rede inválida");
+  if (!/^[a-z0-9_-]+$/.test(network)) throw new Error("rede inválida");
   const r = await get<GtPoolResp>(
     `/networks/${network}/pools?page=${page}&include=dex,base_token,quote_token&sort=${sort}`,
   );
@@ -96,7 +96,7 @@ export function parsePools(r: GtPoolResp, network?: string): Pool[] {
     const t = a.transactions?.h24;
     return {
       id: d.id,
-      network: network ?? d.id.split("_")[0],
+      network: network ?? d.relationships.network?.data.id ?? d.id.slice(0, d.id.lastIndexOf("_")),
       address: a.address,
       name: a.name,
       dex: inc.get(dexId)?.name ?? dexId,
@@ -119,20 +119,41 @@ export function parsePools(r: GtPoolResp, network?: string): Pool[] {
   });
 }
 
-/** Preços em USD de até 30 tokens de uma rede. */
-export async function fetchTokenPrices(network: string, addresses: string[]): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  const list = [...new Set(addresses.map((a) => a.toLowerCase()))].filter((a) => /^0x[0-9a-f]{40}$/.test(a));
-  for (let i = 0; i < list.length; i += 30) {
-    const chunk = list.slice(i, i + 30);
-    const r = await get<{ data: { attributes: { token_prices: Record<string, string | null> } } }>(
-      `/simple/networks/${network}/token_price/${chunk.join(",")}`,
-    );
-    for (const [k, v] of Object.entries(r.data.attributes.token_prices)) {
-      if (v !== null) out.set(k.toLowerCase(), Number(v));
-    }
+/** Todas as redes do GeckoTerminal (~220). */
+export async function fetchNetworks(): Promise<{ id: string; nome: string }[]> {
+  type R = { data: { id: string; attributes: { name: string } }[]; links?: { next: string | null } };
+  const out: { id: string; nome: string }[] = [];
+  for (let page = 1; page <= 6; page++) {
+    const r = await get<R>(`/networks?page=${page}`);
+    out.push(...r.data.map((d) => ({ id: d.id, nome: d.attributes.name })));
+    if (!r.links?.next) break;
   }
   return out;
+}
+
+/** DEXs de uma rede. */
+export async function fetchDexes(network: string): Promise<{ id: string; nome: string }[]> {
+  if (!/^[a-z0-9_-]+$/.test(network)) throw new Error("rede inválida");
+  type R = { data: { id: string; attributes: { name: string } }[] };
+  const out: { id: string; nome: string }[] = [];
+  for (let page = 1; page <= 3; page++) {
+    const r = await get<R>(`/networks/${network}/dexes?page=${page}`);
+    out.push(...r.data.map((d) => ({ id: d.id, nome: d.attributes.name })));
+    if (r.data.length < 100) break;
+  }
+  return out;
+}
+
+export async function fetchDexPools(network: string, dex: string, page = 1): Promise<Pool[]> {
+  if (!/^[a-z0-9_-]+$/.test(network) || !/^[a-z0-9_.-]+$/.test(dex)) throw new Error("parâmetro inválido");
+  const r = await get<GtPoolResp>(`/networks/${network}/dexes/${dex}/pools?page=${page}&include=dex,base_token,quote_token&sort=h24_volume_usd_desc`);
+  return parsePools(r, network);
+}
+
+/** Pools "em alta" de todas as redes ao mesmo tempo. */
+export async function fetchTrendingAll(page = 1): Promise<Pool[]> {
+  const r = await get<GtPoolResp>(`/networks/trending_pools?page=${page}&include=dex,base_token,quote_token`);
+  return parsePools(r);
 }
 
 export type Candle = { t: number; open: number; high: number; low: number; close: number; volumeUsd: number };

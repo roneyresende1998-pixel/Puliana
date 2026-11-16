@@ -100,7 +100,10 @@ export async function findPda(seeds: Uint8Array[], programId: string): Promise<s
 }
 
 // ---------- RPC somente leitura ----------
-export const SOL_RPCS = ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com"];
+// No navegador a RPC oficial recusa pedidos diretos (403), então usamos o
+// retransmissor só-leitura do próprio site (/api/sol). Fora do navegador (testes), direto.
+const PRIMARY = typeof location !== "undefined" && location.protocol.startsWith("http") ? "/api/sol" : "https://api.mainnet-beta.solana.com";
+export const SOL_RPCS = [PRIMARY, "https://solana-rpc.publicnode.com"];
 
 export async function solRpc<T>(method: string, params: unknown[], rpcIndex = 0, onlyThis = false): Promise<T> {
   // Lista branca de métodos: só leitura.

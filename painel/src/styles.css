@@ -79,3 +79,12 @@ tbody tr:hover { background: #1a2131; }
   .walletbar { margin-left: 0; width: 100%; } .walletbar .watch { flex: 1; width: auto; }
   .posgrid { grid-template-columns: 1fr; }
 }
+.seg { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; }
+.porrede { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: -4px 0 12px; }
+.v4box { border-color: #3b2f7a; }
+.pequeno { font-size: 12px; margin: 6px 0; }
+.posicao.suspeita { opacity: .7; border-color: var(--neg); }
+button.link.x { color: var(--muted); margin-left: 6px; font-size: 11px; }
+button.link.x:hover { color: var(--neg); }
+.walletbar .addr { display: inline-flex; align-items: center; }
+optgroup { color: var(--muted); }

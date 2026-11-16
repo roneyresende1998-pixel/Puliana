@@ -8,19 +8,23 @@ carteira conectada sem risco de roubo**.
 
 | Função | Como funciona |
 |---|---|
-| **Explorar pools** | Top pools por rede (Arbitrum, Ethereum, Base, Optimism, Polygon, BNB, Solana) com TVL, volume, giro (Vol/TVL), APR de taxas estimado e variação 24h. Busca por par/token, filtro de TVL mínimo, ordenação por coluna. APR acima de 200% aparece em amarelo (quase sempre sinal de risco). |
-| **Minhas posições** | Lê direto da blockchain todas as posições Uniswap v3 de um endereço (em todas as redes de uma vez): faixa com barra visual, dentro/fora da faixa, composição, **taxas não coletadas**, valor em USD e totais. |
-| **Simulador** | Escolha uma pool → defina faixa (±2% a ±50% ou manual) e depósito: composição inicial, eficiência de capital vs. full-range, APR estimado, taxas/dia, tabela de perda impermanente por cenário e dias de taxas para empatar. |
-| **Backtest** | Aplica a faixa ao histórico real (30–365 dias de candles diários): taxas ganhas, dias na faixa, valor final, comparação com HODL e gráfico. |
-| **Segurança** | Explica as proteções e traz um checklist para você. |
+| **Explorar pools: DEX** | 223 redes do GeckoTerminal (Solana, Ethereum, Base, Arbitrum, BNB, Sui, TON…), com filtro por DEX, busca, TVL mínimo e ordenação. Mostra TVL, volume, giro (Vol/TVL), APR de taxas estimado e variação 24h. O modo "em alta" junta todas as redes. |
+| **Explorar pools: rendimentos** | Cerca de 15 mil pools do DefiLlama em ~100 redes e centenas de protocolos (Orca, Raydium, Meteora, Uniswap, Aerodrome…): APY de taxas, de incentivos, média de 30 dias e risco de perda impermanente. |
+| **Minhas posições** | Várias carteiras ao mesmo tempo, EVM e Solana, somadas: **Uniswap v3** (8 redes), **Uniswap v4** (8 redes, pelo número do NFT), **PancakeSwap v3** (5), **SushiSwap v3** (6), **Aerodrome**, **Velodrome**, **Orca Whirlpools**, **Raydium CLMM** e **Meteora DLMM**. Mostra faixa, dentro/fora, composição, taxas não coletadas, valor em USD, total por rede e filtros. |
+| **Simulador e backtest** | Faixa, eficiência de capital, APR estimado, perda impermanente por cenário e backtest com candles reais. |
+| **Segurança** | Proteções explicadas, checklist e alerta automático de token-golpe. |
+
+Redes EVM das posições: Ethereum, Arbitrum, Base, Optimism, Polygon, BNB Chain, Avalanche, Unichain e Linea. Todos os endereços de contrato foram conferidos na blockchain.
+
+**Ainda não lido:** posições em stake (NFT depositado em gauge/farm da Aerodrome, Velodrome ou PancakeSwap, que sai da carteira), Orca position bundles e pools v2 (não concentradas).
 
 ## Por que é seguro deixar conectado
 
-1. **Somente leitura, garantido em código.** Todo acesso à carteira passa por
-   `src/lib/safeWallet.ts`, que só deixa passar 4 métodos: ler endereço
-   (`eth_requestAccounts`, `eth_accounts`), ler a rede (`eth_chainId`) e
-   desconectar (`wallet_revokePermissions`). Assinaturas, transações, aprovações
-   de token e troca de rede são **bloqueadas antes de chegar na carteira**.
+1. **Somente leitura, garantido em código.** Na EVM todo acesso à carteira passa
+   por `src/lib/safeWallet.ts`, que só deixa passar 4 métodos (ler endereço, ler
+   rede e desconectar). Na Solana (`src/lib/safeSolana.ts`) o painel só chama
+   `connect`/`disconnect` e lê a chave pública. Não existe código de assinatura.
+   O retransmissor Solana (`api/sol.ts`) também só aceita métodos de consulta.
 2. **Testes automatizados que travam isso:** `tests/safeWallet.test.ts` testa os
    métodos perigosos, e `tests/static-scan.test.ts` falha se alguém colocar no
    código qualquer chamada de assinatura/aprovação, campo de seed/chave privada,
@@ -28,7 +32,8 @@ carteira conectada sem risco de roubo**.
 3. **Modo Observar:** cole qualquer endereço e veja tudo sem conectar nada.
 4. **Sem backend, sem banco, sem chave privada.** Roda inteiro no navegador.
 5. **Content-Security-Policy restrita:** só scripts do próprio site e conexões
-   apenas com `api.geckoterminal.com` e `*.publicnode.com`. Sem iframes, sem
+   apenas com `api.geckoterminal.com`, `coins.llama.fi`, `yields.llama.fi`,
+   `*.publicnode.com` e o próprio site. Sem iframes, sem
    formulários externos, sem scripts de CDN. (Testado: um `fetch` para um site
    qualquer é bloqueado pelo navegador.)
 6. **Supply-chain mínima:** em produção só existe React. Nada de bibliotecas de
@@ -53,7 +58,7 @@ simula; para coletar taxas ou mexer em posições use o site oficial
 ```bash
 cd painel
 npm ci          # instala exatamente as versões do package-lock
-npm test        # 18 testes (segurança, matemática v3, leitura de posições, backtest)
+npm test        # 27 testes (segurança, retransmissor, Solana, keccak, matemática, posições)
 npm run dev     # http://localhost:5174
 ```
 
@@ -87,6 +92,7 @@ painel/
 └── vite.config.ts          # CSP embutida no build
 ```
 
-Dados: GeckoTerminal (limite gratuito ~30 consultas/min) e nós públicos
-PublicNode. Estimativas de APR e backtest são aproximações. Não é recomendação
+Dados: GeckoTerminal (limite gratuito ~30 consultas/min), DefiLlama (preços e
+rendimentos), nós públicos PublicNode (EVM) e RPC oficial da Solana via
+retransmissor só leitura. Estimativas de APR e backtest são aproximações. Não é recomendação
 de investimento.
