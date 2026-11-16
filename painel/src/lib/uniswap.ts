@@ -1,40 +1,18 @@
-// Leitura de posições Uniswap v3 direto da blockchain (somente eth_call).
-// Funciona com qualquer endereço — não precisa conectar carteira.
+// Leitura de posições de liquidez concentrada em EVM (Uniswap v3 e forks:
+// PancakeSwap, SushiSwap, Aerodrome/Velodrome Slipstream) — somente eth_call.
 
 import {
   SEL, MAX_UINT128, calldata, decodeAddress, decodeInt, decodeStringOrBytes32,
-  decodeUint, encodeAddress, encodeUint, normalizeAddress, words,
+  decodeUint, encodeAddress, encodeInt, encodeUint, normalizeAddress, words,
 } from "./abi.ts";
-import type { EvmChain } from "./chains.ts";
+import { chainByKey, type EvmChain, type V3Protocol } from "./chains.ts";
+import { amountsFromSqrt, tickPrice } from "./clmm.ts";
+import type { LpPosition, TokenInfo } from "./positions.ts";
 import { ethCall } from "./rpc.ts";
-import { amountsForLiquidity, tickToPrice } from "./v3math.ts";
 
-export type Token = { address: string; symbol: string; decimals: number };
+const tokenCache = new Map<string, Promise<TokenInfo>>();
 
-export type Position = {
-  tokenId: bigint;
-  token0: Token;
-  token1: Token;
-  fee: number; // ex.: 0.0005
-  tickLower: number;
-  tickUpper: number;
-  tickCurrent: number;
-  liquidity: bigint;
-  inRange: boolean;
-  /** preços em token1 por token0 */
-  priceLower: number;
-  priceUpper: number;
-  priceCurrent: number;
-  amount0: number;
-  amount1: number;
-  fees0: number;
-  fees1: number;
-  pool: string;
-};
-
-const tokenCache = new Map<string, Promise<Token>>();
-
-function loadToken(chain: EvmChain, address: string): Promise<Token> {
+function loadToken(chain: EvmChain, address: string): Promise<TokenInfo> {
   const k = `${chain.key}:${address}`;
   let p = tokenCache.get(k);
   if (!p) {
@@ -51,105 +29,109 @@ function loadToken(chain: EvmChain, address: string): Promise<Token> {
   return p;
 }
 
-export async function listTokenIds(chain: EvmChain, owner: string, max = 60): Promise<bigint[]> {
+const once = new Map<string, Promise<string>>();
+function cached(key: string, f: () => Promise<string>) {
+  let v = once.get(key);
+  if (!v) { v = f(); once.set(key, v); v.catch(() => once.delete(key)); }
+  return v;
+}
+
+export async function listTokenIds(chain: EvmChain, npm: string, owner: string, max = 100): Promise<bigint[]> {
   const o = normalizeAddress(owner);
-  const bal = decodeUint(words(await ethCall(chain, chain.positionManager, calldata(SEL.balanceOf, encodeAddress(o))))[0]);
+  const bal = decodeUint(words(await ethCall(chain, npm, calldata(SEL.balanceOf, encodeAddress(o))))[0]);
   const n = Number(bal > BigInt(max) ? BigInt(max) : bal);
-  const ids = await Promise.all(
-    Array.from({ length: n }, (_, i) =>
-      ethCall(chain, chain.positionManager, calldata(SEL.tokenOfOwnerByIndex, encodeAddress(o), encodeUint(i))),
-    ),
-  );
-  return ids.map((h) => decodeUint(words(h)[0]));
-}
-
-let factoryCache = new Map<string, Promise<string>>();
-function factoryOf(chain: EvmChain): Promise<string> {
-  let f = factoryCache.get(chain.key);
-  if (!f) {
-    f = ethCall(chain, chain.positionManager, SEL.factory).then((h) => decodeAddress(words(h)[0]));
-    factoryCache.set(chain.key, f);
+  const ids: bigint[] = [];
+  for (let i = 0; i < n; i += 10) {
+    const part = await Promise.all(
+      Array.from({ length: Math.min(10, n - i) }, (_, j) =>
+        ethCall(chain, npm, calldata(SEL.tokenOfOwnerByIndex, encodeAddress(o), encodeUint(i + j))),
+      ),
+    );
+    ids.push(...part.map((h) => decodeUint(words(h)[0])));
   }
-  return f;
+  return ids;
 }
 
-export async function loadPosition(chain: EvmChain, owner: string, tokenId: bigint): Promise<Position> {
-  const w = words(await ethCall(chain, chain.positionManager, calldata(SEL.positions, encodeUint(tokenId))));
+export async function loadPosition(proto: V3Protocol, owner: string, tokenId: bigint): Promise<LpPosition> {
+  const chain = chainByKey(proto.chain);
+  const npm = proto.positionManager;
+  const w = words(await ethCall(chain, npm, calldata(SEL.positions, encodeUint(tokenId))));
   const token0Addr = decodeAddress(w[2]);
   const token1Addr = decodeAddress(w[3]);
-  const feeRaw = Number(decodeUint(w[4]));
+  const feeOrSpacing = Number(decodeInt(w[4]));
   const tickLower = Number(decodeInt(w[5]));
   const tickUpper = Number(decodeInt(w[6]));
   const liquidity = decodeUint(w[7]);
   const owed0 = decodeUint(w[10]);
   const owed1 = decodeUint(w[11]);
 
-  const factory = await factoryOf(chain);
-  const [token0, token1, poolHex] = await Promise.all([
+  const factory = await cached(`f:${chain.key}:${npm}`, () => ethCall(chain, npm, SEL.factory).then((h) => decodeAddress(words(h)[0])));
+  const getPoolData = proto.kind === "slipstream"
+    ? calldata(SEL.getPoolSlipstream, encodeAddress(token0Addr), encodeAddress(token1Addr), encodeInt(feeOrSpacing))
+    : calldata(SEL.getPool, encodeAddress(token0Addr), encodeAddress(token1Addr), encodeUint(feeOrSpacing));
+  const [token0, token1, pool] = await Promise.all([
     loadToken(chain, token0Addr),
     loadToken(chain, token1Addr),
-    ethCall(chain, factory, calldata(SEL.getPool, encodeAddress(token0Addr), encodeAddress(token1Addr), encodeUint(feeRaw))),
+    cached(`p:${chain.key}:${factory}:${getPoolData}`, () => ethCall(chain, factory, getPoolData).then((h) => decodeAddress(words(h)[0]))),
   ]);
-  const pool = decodeAddress(words(poolHex)[0]);
-  const s0 = words(await ethCall(chain, pool, SEL.slot0));
+  const [s0hex, feeHex] = await Promise.all([
+    ethCall(chain, pool, SEL.slot0),
+    proto.kind === "slipstream" ? cached(`fee:${chain.key}:${pool}`, () => ethCall(chain, pool, SEL.fee)) : Promise.resolve(""),
+  ]);
+  const s0 = words(s0hex);
   const sqrtPriceX96 = decodeUint(s0[0]);
   const tickCurrent = Number(decodeInt(s0[1]));
+  const feePips = proto.kind === "slipstream" ? Number(decodeUint(words(feeHex)[0] ?? "0")) : feeOrSpacing;
 
   // Taxas não coletadas: SIMULA collect() via eth_call (nada é enviado/assinado).
-  let fee0Raw = owed0, fee1Raw = owed1;
+  let fee0Raw = owed0, fee1Raw = owed1, approx = true;
   try {
     const o = normalizeAddress(owner);
-    const r = words(
-      await ethCall(
-        chain,
-        chain.positionManager,
-        calldata(SEL.collect, encodeUint(tokenId), encodeAddress(o), encodeUint(MAX_UINT128), encodeUint(MAX_UINT128)),
-        o,
-      ),
-    );
+    const r = words(await ethCall(chain, npm,
+      calldata(SEL.collect, encodeUint(tokenId), encodeAddress(o), encodeUint(MAX_UINT128), encodeUint(MAX_UINT128)), o));
     fee0Raw = decodeUint(r[0]);
     fee1Raw = decodeUint(r[1]);
-  } catch {
-    /* fallback: tokensOwed já registrados */
-  }
+    approx = false;
+  } catch { /* fallback: tokensOwed já registrados */ }
 
   const sqrtP = Number(sqrtPriceX96) / 2 ** 96;
-  const { amount0, amount1 } = amountsForLiquidity(Number(liquidity), sqrtP, tickLower, tickUpper);
-  const d0 = 10 ** token0.decimals, d1 = 10 ** token1.decimals;
-
+  const { a0, a1 } = amountsFromSqrt(Number(liquidity), sqrtP, tickLower, tickUpper);
   return {
-    tokenId,
-    token0,
-    token1,
-    fee: feeRaw / 1_000_000,
-    tickLower,
-    tickUpper,
-    tickCurrent,
-    liquidity,
+    key: `${proto.nome}:${chain.key}:${tokenId}`,
+    id: tokenId.toString(),
+    chainKey: chain.key,
+    chainName: chain.nome,
+    protocol: proto.nome,
+    token0, token1,
+    fee: feePips / 1_000_000,
+    priceLower: tickPrice(tickLower, token0.decimals, token1.decimals),
+    priceUpper: tickPrice(tickUpper, token0.decimals, token1.decimals),
+    priceCurrent: sqrtP * sqrtP * 10 ** (token0.decimals - token1.decimals),
     inRange: liquidity > 0n && tickCurrent >= tickLower && tickCurrent < tickUpper,
-    priceLower: tickToPrice(tickLower, token0.decimals, token1.decimals),
-    priceUpper: tickToPrice(tickUpper, token0.decimals, token1.decimals),
-    priceCurrent: (sqrtP * sqrtP) * 10 ** (token0.decimals - token1.decimals),
-    amount0: amount0 / d0,
-    amount1: amount1 / d1,
-    fees0: Number(fee0Raw) / d0,
-    fees1: Number(fee1Raw) / d1,
-    pool,
+    closed: liquidity === 0n,
+    amount0: a0 / 10 ** token0.decimals,
+    amount1: a1 / 10 ** token1.decimals,
+    fees0: Number(fee0Raw) / 10 ** token0.decimals,
+    fees1: Number(fee1Raw) / 10 ** token1.decimals,
+    feesApprox: approx,
+    manageUrl: proto.manage(chain.key, tokenId.toString()),
+    explorerUrl: `${chain.explorer}/address/${pool}`,
+    gecko: chain.gecko,
   };
 }
 
-export async function loadPositions(chain: EvmChain, owner: string, includeClosed: boolean): Promise<Position[]> {
-  const ids = await listTokenIds(chain, owner);
-  const out: Position[] = [];
-  // Em lotes pequenos para não estourar o limite do RPC público.
+export async function loadProtocolPositions(proto: V3Protocol, owner: string, includeClosed: boolean): Promise<LpPosition[]> {
+  const chain = chainByKey(proto.chain);
+  const ids = await listTokenIds(chain, proto.positionManager, owner);
+  const out: LpPosition[] = [];
   for (let i = 0; i < ids.length; i += 5) {
-    const batch = await Promise.all(ids.slice(i, i + 5).map((id) => loadPosition(chain, owner, id).catch(() => null)));
-    for (const p of batch) if (p && (includeClosed || p.liquidity > 0n)) out.push(p);
+    const batch = await Promise.all(ids.slice(i, i + 5).map((id) => loadPosition(proto, owner, id).catch(() => null)));
+    for (const p of batch) if (p && (includeClosed || !p.closed)) out.push(p);
   }
-  return out.sort((a, b) => Number(b.liquidity > 0n) - Number(a.liquidity > 0n));
+  return out;
 }
 
 export function _resetCachesForTests() {
   tokenCache.clear();
-  factoryCache = new Map();
+  once.clear();
 }

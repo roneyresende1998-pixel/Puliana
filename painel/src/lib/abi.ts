@@ -82,6 +82,8 @@ export const SEL = {
   positions: "0x99fbab88", // positions(uint256)
   factory: "0xc45a0155", // factory()
   getPool: "0x1698ee82", // getPool(address,address,uint24)
+  getPoolSlipstream: "0x28af8d0b", // getPool(address,address,int24) — Aerodrome/Velodrome
+  fee: "0xddca3f43", // fee()
   slot0: "0x3850c7bd", // slot0()
   symbol: "0x95d89b41", // symbol()
   decimals: "0x313ce567", // decimals()
