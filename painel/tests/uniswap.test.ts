@@ -49,3 +49,18 @@ test("lê posições Uniswap v3 de um endereço só com eth_call", async () => {
   assert.equal(p.fees1, 2.5);
   assert.ok(methods.every((m) => m === "eth_call"), "somente eth_call");
 });
+
+import { decodeOwnerOfBatch, encodeOwnerOfBatch } from "../src/lib/uniswapV4.ts";
+test("multicall ownerOf: codifica e decodifica lotes (inclusive NFT queimado)", () => {
+  const pm = "0x7c5f5a4bbd8fd63184577525326123b519429bdc";
+  const data = encodeOwnerOfBatch(pm, [1, 2]);
+  assert.ok(data.startsWith("0x82ad56cb"));
+  assert.ok(data.includes("6352211e" + (1).toString(16).padStart(64, "0")));
+  // resposta: [ (true, dono A), (false, vazio) ]
+  const W = (n: bigint | number) => BigInt(n).toString(16).padStart(64, "0");
+  const A = "00000000000000000000000000000000000000aa";
+  const item1 = W(1) + W(64) + W(32) + A.padStart(64, "0");
+  const item2 = W(0) + W(64) + W(0);
+  const resp = "0x" + W(32) + W(2) + W(64) + W(64 + item1.length / 2) + item1 + item2;
+  assert.deepEqual(decodeOwnerOfBatch(resp, 2), ["0x" + A, null]);
+});

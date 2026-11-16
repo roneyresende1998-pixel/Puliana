@@ -9,10 +9,10 @@ import { loadMeteoraPositions } from "./solana/meteora.ts";
 import { loadOrcaPositions } from "./solana/orca.ts";
 import { loadRaydiumPositions } from "./solana/raydium.ts";
 import { loadProtocolPositions } from "./uniswap.ts";
-import { V4, countV4, loadV4Position } from "./uniswapV4.ts";
+import { V4, countV4, lerV4Cache, loadV4Position, scanV4Owners } from "./uniswapV4.ts";
 
 export type SourceStatus = { fonte: string; ok: boolean; qtd: number; erro?: string };
-export type ScanResult = { positions: LpPosition[]; status: SourceStatus[]; v4Counts: { chain: string; nome: string; count: number }[] };
+export type ScanResult = { positions: LpPosition[]; status: SourceStatus[]; v4Counts: { chain: string; nome: string; count: number; achados: number; buscaCompleta: boolean }[] };
 
 export type AddressKind = "evm" | "solana" | null;
 export const addressKind = (a: string): AddressKind => (isAddress(a) ? "evm" : isSolAddress(a) ? "solana" : null);
@@ -42,23 +42,34 @@ export async function scanAddress(
       const nome = `${p.nome} · ${EVM_CHAINS.find((c) => c.key === p.chain)!.nome}`;
       return run(nome, status, () => loadProtocolPositions(p, address, opts.includeClosed));
     });
-    const v4Tasks = Object.keys(V4).map(async (chain) => {
-      try {
-        const n = await countV4(chain, address);
-        if (n > 0) v4Counts.push({ chain, nome: EVM_CHAINS.find((c) => c.key === chain)!.nome, count: n });
-      } catch { /* ignora */ }
-    });
-    const manual = run("Uniswap v4 (NFTs informados)", status, async () => {
+    // Uniswap v4: conta os NFTs, descobre os números sozinho (histórico recente)
+    // e junta com os que o usuário informou à mão.
+    const v4Task = run("Uniswap v4", status, async () => {
+      const ids = new Map<string, { chain: string; id: string }>();
+      for (const v of opts.v4Ids ?? []) ids.set(`${v.chain}:${v.id}`, v);
+      await Promise.all(Object.keys(V4).map(async (chain) => {
+        let n = 0;
+        try { n = await countV4(chain, address); } catch { return; }
+        if (n === 0) return;
+        // Só os NFTs novos desde a última busca (rápido). A busca completa é um botão na tela.
+        let completa = !!lerV4Cache(chain, address)?.completo;
+        if (lerV4Cache(chain, address)) {
+          try { const r = await scanV4Owners(chain, address, false); completa = r.completo; for (const id of r.ids) ids.set(`${chain}:${id}`, { chain, id }); } catch { /* segue */ }
+        }
+        const total = [...ids.values()].filter((v) => v.chain === chain).length;
+        v4Counts.push({ chain, nome: EVM_CHAINS.find((c) => c.key === chain)!.nome, count: n, achados: Math.min(total, n), buscaCompleta: completa });
+      }));
       const out: LpPosition[] = [];
-      for (const { chain, id } of opts.v4Ids ?? []) {
-        const p = await loadV4Position(chain, BigInt(id), address);
-        if (opts.includeClosed || !p.closed) out.push(p);
+      for (const { chain, id } of ids.values()) {
+        try {
+          const p = await loadV4Position(chain, BigInt(id), address);
+          if (p.owner === address.toLowerCase() && (opts.includeClosed || !p.closed)) out.push(p);
+        } catch { /* NFT inexistente nessa rede */ }
       }
       return out;
     });
     opts.onProgress?.(`Lendo ${tasks.length + 1} protocolos em ${EVM_CHAINS.length} redes…`);
-    const res = await Promise.all([...tasks, manual]);
-    await Promise.all(v4Tasks);
+    const res = await Promise.all([...tasks, v4Task]);
     positions = res.flat();
   } else if (kind === "solana") {
     opts.onProgress?.("Lendo NFTs da carteira Solana…");

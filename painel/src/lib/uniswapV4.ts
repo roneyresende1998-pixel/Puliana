@@ -46,7 +46,7 @@ async function token(chainKey: string, addr: string): Promise<TokenInfo> {
 }
 
 /** Lê uma posição v4 pelo número do NFT. `owner` serve só para avisar se o NFT não é dessa carteira. */
-export async function loadV4Position(chainKey: string, tokenId: bigint, owner?: string): Promise<LpPosition & { owner: string }> {
+export async function loadV4Position(chainKey: string, tokenId: bigint, _owner?: string): Promise<LpPosition & { owner: string }> {
   const c = chainByKey(chainKey);
   const { pm, stateView } = V4[chainKey];
   const [infoHex, liqHex, ownHex] = await Promise.all([
@@ -103,6 +103,87 @@ export async function loadV4Position(chainKey: string, tokenId: bigint, owner?: 
     manageUrl: `https://app.uniswap.org/positions/v4/${slug[chainKey] ?? chainKey}/${tokenId}`,
     explorerUrl: `${c.explorer}/nft/${pm}/${tokenId}`,
     gecko: c.gecko,
-    owner: owner && nftOwner !== owner.toLowerCase() ? nftOwner : nftOwner,
+    owner: nftOwner,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Descoberta dos NFTs v4 sem histórico: pergunta ao contrato o dono de cada NFT
+// (ownerOf) em lotes de 1000 via Multicall3. Funciona para posições de qualquer
+// idade. A primeira busca completa é demorada (a Base tem milhões de NFTs); o
+// resultado fica salvo no navegador e depois só os NFTs novos são conferidos.
+
+const MULTICALL3 = "0xca11bde05977b3631167028862be2a173976ca11";
+const LOTE = 1000;
+const w64 = (n: bigint | number) => BigInt(n).toString(16).padStart(64, "0");
+
+/** aggregate3((address,bool,bytes)[]) com ownerOf(id) para cada id. */
+export function encodeOwnerOfBatch(pm: string, ids: number[]): string {
+  const item = (id: number) => w64(BigInt(pm)) + w64(1) + w64(96) + w64(36) + (S4.ownerOf.slice(2) + w64(id)).padEnd(128, "0");
+  const items = ids.map(item);
+  let head = "", off = ids.length * 32;
+  for (const it of items) { head += w64(off); off += it.length / 2; }
+  return "0x82ad56cb" + w64(32) + w64(ids.length) + head + items.join("");
+}
+
+export function decodeOwnerOfBatch(hex: string, n: number): (string | null)[] {
+  const h = hex.slice(2);
+  const W = (i: number) => h.slice(i * 64, i * 64 + 64);
+  const out: (string | null)[] = [];
+  for (let i = 0; i < n; i++) {
+    const o = parseInt(W(2 + i), 16) / 32 + 2;
+    const ok = parseInt(W(o), 16) === 1;
+    const d = parseInt(W(o + 1), 16) / 32 + o;
+    out.push(ok && parseInt(W(d), 16) === 32 ? "0x" + W(d + 1).slice(24) : null);
+  }
+  return out;
+}
+
+type V4Cache = { ids: string[]; ate: number; completo: boolean };
+const cacheKey = (chain: string, owner: string) => `v4scan:${chain}:${owner.toLowerCase()}`;
+export function lerV4Cache(chain: string, owner: string): V4Cache | null {
+  try { const v = JSON.parse(localStorage.getItem(cacheKey(chain, owner)) ?? "null"); return v && Array.isArray(v.ids) ? v : null; } catch { return null; }
+}
+function salvarV4Cache(chain: string, owner: string, v: V4Cache) { try { localStorage.setItem(cacheKey(chain, owner), JSON.stringify(v)); } catch { /* ignora */ } }
+
+/**
+ * Varre os NFTs v4 de `desde` até o último criado e devolve os da carteira.
+ * `completa` = começa do NFT 1 (busca profunda); senão só os novos desde o cache.
+ */
+export async function scanV4Owners(chainKey: string, owner: string, completa: boolean, onProgress?: (pct: number) => void, sinal?: { cancelado: boolean }): Promise<{ ids: string[]; completo: boolean }> {
+  const c = chainByKey(chainKey);
+  const pm = V4[chainKey].pm;
+  const o = normalizeAddress(owner);
+  const cache = lerV4Cache(chainKey, o);
+  const next = Number(decodeUint(words(await ethCall(c, pm, "0x75794a3c"))[0])); // nextTokenId()
+  const inicio = completa ? 1 : (cache?.ate ?? next - 1) + 1;
+  const achados = new Set(completa ? [] : cache?.ids ?? []);
+  const lotes: number[] = [];
+  for (let s = inicio; s < next; s += LOTE) lotes.push(s);
+  let feitos = 0, falhas = 0;
+  for (let i = 0; i < lotes.length; i += 8) {
+    if (sinal?.cancelado) break;
+    await Promise.all(lotes.slice(i, i + 8).map(async (s) => {
+      const ids = Array.from({ length: Math.min(LOTE, next - s) }, (_, k) => s + k);
+      for (let t = 0; t < 3; t++) {
+        try {
+          const r = await ethCall(c, MULTICALL3, encodeOwnerOfBatch(pm, ids));
+          decodeOwnerOfBatch(r, ids.length).forEach((dono, k) => { if (dono === o) achados.add(String(ids[k])); });
+          return;
+        } catch { await new Promise((ok) => setTimeout(ok, 800 * (t + 1))); }
+      }
+      falhas++;
+    }));
+    feitos = Math.min(lotes.length, i + 8);
+    onProgress?.(Math.round((feitos * 100) / Math.max(1, lotes.length)));
+  }
+  const terminou = !sinal?.cancelado && falhas === 0;
+  // confere de novo os já conhecidos (podem ter sido vendidos/transferidos)
+  const ids: string[] = [];
+  for (const id of achados) {
+    try { if (decodeAddress(words(await ethCall(c, pm, calldata(S4.ownerOf, encodeUint(BigInt(id)))))[0]) === o) ids.push(id); } catch { /* queimado */ }
+  }
+  const completoAgora = completa ? terminou : !!cache?.completo && terminou;
+  if (terminou || !cache) salvarV4Cache(chainKey, o, { ids, ate: terminou ? next - 1 : cache?.ate ?? next - 1, completo: completoAgora });
+  return { ids, completo: completoAgora };
 }

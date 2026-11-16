@@ -30,3 +30,4 @@ export async function ethCall(
   }
   return json.result;
 }
+

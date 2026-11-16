@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EVM_CHAINS } from "../lib/chains.ts";
+import { V4, scanV4Owners } from "../lib/uniswapV4.ts";
 import { fmtNum, fmtPct, fmtUsd, shortAddr, store } from "../lib/format.ts";
 import type { LpPosition } from "../lib/positions.ts";
 import { WRAPPED, fetchPrices } from "../lib/prices.ts";
@@ -146,7 +147,7 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
       {progresso ? <p className="muted">⏳ {progresso}</p> : null}
       {semPreco ? <p className="muted">* Alguns tokens estão sem preço (pouca liquidez) e ficaram fora do total.</p> : null}
 
-      <V4Box counts={v4Counts} ids={v4Ids} onIds={(v) => { store.set("v4ids", JSON.stringify(v)); setV4Ids(v); }} />
+      <V4Box counts={v4Counts} ids={v4Ids} onIds={(v) => { store.set("v4ids", JSON.stringify(v)); setV4Ids(v); }} onAchou={carregar} />
 
       {!loading && lista.length === 0 ? <p className="muted">Nenhuma posição encontrada com esses filtros.</p> : null}
 
@@ -208,10 +209,23 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
   );
 }
 
-function V4Box({ counts, ids, onIds }: { counts: { chain: string; nome: string; count: number; wallet: string }[]; ids: V4Id[]; onIds: (v: V4Id[]) => void }) {
-  const [chain, setChain] = useState(counts[0]?.chain ?? "base");
+function V4Box({ counts, ids, onIds, onAchou }: { counts: { chain: string; nome: string; count: number; achados: number; buscaCompleta: boolean; wallet: string }[]; ids: V4Id[]; onIds: (v: V4Id[]) => void; onAchou: () => void }) {
+  const faltando = counts.filter((c) => c.achados < c.count);
+  const [busca, setBusca] = useState<Record<string, number | string>>({});
+  async function buscar(c: { chain: string; wallet: string; nome: string }) {
+    const k = c.chain + c.wallet;
+    setBusca((b) => ({ ...b, [k]: 0 }));
+    try {
+      const r = await scanV4Owners(c.chain, c.wallet, true, (pct) => setBusca((b) => ({ ...b, [k]: pct })));
+      setBusca((b) => ({ ...b, [k]: r.completo ? `achei ${r.ids.length}` : "busca incompleta (rede instável) — tente de novo" }));
+      onAchou();
+    } catch (e) {
+      setBusca((b) => ({ ...b, [k]: "erro: " + (e as Error).message }));
+    }
+  }
+  const [chain, setChain] = useState(faltando[0]?.chain ?? counts[0]?.chain ?? "base");
   const [txt, setTxt] = useState("");
-  if (counts.length === 0 && ids.length === 0) return null;
+  if (faltando.length === 0 && ids.length === 0) return null; // tudo achado automaticamente
   const adicionar = () => {
     const novos = txt.split(/[\s,;]+/).map((s) => s.replace(/^#/, "")).filter((s) => /^\d{1,12}$/.test(s));
     const merged = [...ids, ...novos.map((id) => ({ chain, id }))].filter((v, i, a) => a.findIndex((x) => x.chain === v.chain && x.id === v.id) === i);
@@ -221,8 +235,30 @@ function V4Box({ counts, ids, onIds }: { counts: { chain: string; nome: string; 
   return (
     <div className="card v4box">
       <strong>Uniswap v4</strong>{" "}
-      {counts.length ? <span>· encontrado: {counts.map((c) => `${c.count} em ${c.nome}`).join(", ")}</span> : null}
-      <p className="muted pequeno">A v4 não deixa listar as posições de uma carteira pelos nós públicos. Cole uma vez os números dos NFTs (aparecem no site da Uniswap, em “Posições”, ou no explorer da rede) e o painel lembra deles.</p>
+      {counts.length ? <span>· achei automaticamente {counts.map((c) => `${c.achados} de ${c.count} em ${c.nome}`).join(", ")}</span> : null}
+      {faltando.length ? (
+        <>
+          <p className="muted pequeno">A Uniswap v4 não deixa listar as posições de uma carteira de forma direta. A busca abaixo confere o dono de todos os NFTs v4 da rede (na Base leva alguns minutos, nas outras segundos). Só precisa fazer uma vez: depois fica salvo e as atualizações só olham os NFTs novos.</p>
+          <div className="toolbar">
+            {faltando.map((c) => {
+              const k = c.chain + c.wallet;
+              const st = busca[k];
+              return typeof st === "number"
+                ? <span key={k} className="badge">Buscando em {c.nome}… {st}%</span>
+                : <button key={k} onClick={() => buscar(c)}>{st ? `${c.nome}: ${st} · buscar de novo` : `Buscar minhas posições v4 em ${c.nome}`}</button>;
+            })}
+          </div>
+          <p className="muted pequeno">Ou cole os números dos NFTs à mão (aparecem no site da Uniswap ou no explorer):</p>
+          <p className="pequeno">
+            {faltando.map((c) => {
+              const ex = EVM_CHAINS.find((x) => x.key === c.chain)!.explorer;
+              const pm = V4[c.chain]?.pm;
+              return <a key={c.chain + c.wallet} className="small" href={`${ex}/token/${pm}?a=${c.wallet}`} target="_blank" rel="noopener noreferrer">NFTs v4 da carteira em {c.nome} ↗</a>;
+            })}{" "}
+            <a className="small" href="https://app.uniswap.org/positions" target="_blank" rel="noopener noreferrer">Minhas posições no site da Uniswap ↗</a>
+          </p>
+        </>
+      ) : null}
       <div className="toolbar">
         <select value={chain} onChange={(e) => setChain(e.target.value)}>
           {EVM_CHAINS.filter((c) => ["eth", "arbitrum", "base", "optimism", "polygon", "unichain", "bsc", "avalanche"].includes(c.key)).map((c) => <option key={c.key} value={c.key}>{c.nome}</option>)}
