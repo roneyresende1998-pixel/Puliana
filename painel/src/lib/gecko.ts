@@ -158,15 +158,18 @@ export async function fetchTrendingAll(page = 1): Promise<Pool[]> {
 
 export type Candle = { t: number; open: number; high: number; low: number; close: number; volumeUsd: number };
 
-/** Candles diários: preço do token base cotado no token quote, volume em USD. */
-export async function fetchDailyCandles(network: string, poolAddress: string, days: number): Promise<Candle[]> {
+/** Velas (hora ou dia): preço do token base cotado no quote, volume em USD. */
+export async function fetchOhlcv(network: string, poolAddress: string, tf: "hour" | "day", limit: number): Promise<Candle[]> {
   if (!/^[a-zA-Z0-9]+$/.test(poolAddress)) throw new Error("endereço de pool inválido");
-  const path = (cur: string) => `/networks/${network}/pools/${poolAddress}/ohlcv/day?limit=${Math.min(days, 1000)}&currency=${cur}`;
+  const path = (cur: string) => `/networks/${network}/pools/${poolAddress}/ohlcv/${tf}?limit=${Math.min(Math.max(1, limit), 1000)}&currency=${cur}`;
   type R = { data: { attributes: { ohlcv_list: number[][] } } };
   // Duas consultas: "token" dá o preço na moeda quote; "usd" dá o volume em dólares.
   const [tok, usd] = await Promise.all([get<R>(path("token")), get<R>(path("usd"))]);
   return mergeCandles(tok.data.attributes.ohlcv_list, usd.data.attributes.ohlcv_list);
 }
+
+/** Compatibilidade: velas diárias. */
+export const fetchDailyCandles = (network: string, poolAddress: string, days: number) => fetchOhlcv(network, poolAddress, "day", days);
 
 export function mergeCandles(tokenList: number[][], usdList: number[][]): Candle[] {
   const volUsd = new Map(usdList.map((c) => [c[0], c[5]]));

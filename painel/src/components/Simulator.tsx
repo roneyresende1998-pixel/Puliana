@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { runBacktest, type BacktestResult } from "../lib/backtest.ts";
 import { fmtNum, fmtPct, fmtUsd } from "../lib/format.ts";
-import { fetchDailyCandles, type Pool } from "../lib/gecko.ts";
+import type { Pool } from "../lib/gecko.ts";
+import { fetchHistory, type History } from "../lib/history.ts";
 import { amountsAt, capitalEfficiency, impermanentLoss, impermanentLossV2, liquidityForValue, poolFeeApr } from "../lib/v3math.ts";
 
 const PRESETS = [2, 5, 10, 20, 35, 50];
@@ -16,6 +17,7 @@ export default function Simulator({ pool }: { pool: Pool | null }) {
   const [tvl, setTvl] = useState(20_000_000);
   const [quoteUsd, setQuoteUsd] = useState(1);
   const [dias, setDias] = useState(90);
+  const [hist, setHist] = useState<History | null>(null);
   const [bt, setBt] = useState<BacktestResult | null>(null);
   const [btErro, setBtErro] = useState<string | null>(null);
   const [btLoading, setBtLoading] = useState(false);
@@ -60,11 +62,10 @@ export default function Simulator({ pool }: { pool: Pool | null }) {
     setBtLoading(true);
     setBtErro(null);
     try {
-      const raw = await fetchDailyCandles(pool.network, pool.address, dias);
-      const candles = invertido
-        ? raw.map((c) => ({ ...c, open: 1 / c.open, close: 1 / c.close, high: 1 / c.low, low: 1 / c.high }))
-        : raw;
-      setBt(runBacktest({ candles, depositUsd: deposito, quoteUsd, pa, pb, feeTier: taxa / 100, tvlUsd: tvl }));
+      if (!(dias >= 1)) throw new Error("Digite um número de dias (1 ou mais).");
+      const h = await fetchHistory(pool, dias, invertido);
+      setHist(h);
+      setBt(runBacktest({ candles: h.candles, depositUsd: deposito, quoteUsd, pa, pb, feeTier: taxa / 100, tvlUsd: tvl }));
     } catch (e) {
       setBtErro((e as Error).message);
     } finally {
@@ -139,12 +140,18 @@ export default function Simulator({ pool }: { pool: Pool | null }) {
             <h3>Backtest com histórico real</h3>
             {pool ? (
               <div className="toolbar">
-                <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
-                  {[30, 90, 180, 365].map((d) => <option key={d} value={d}>{d} dias</option>)}
-                </select>
+                <label className="inline">Período
+                  <input className="dias" type="number" min={1} max={3650} step={1} value={dias}
+                    onChange={(e) => setDias(Math.max(0, Math.floor(Number(e.target.value))))}
+                    onKeyDown={(e) => e.key === "Enter" && backtest()} aria-label="Dias de backtest" /> dias
+                </label>
+                {[7, 30, 90, 180, 365, 730, 1095].map((d) => (
+                  <button key={d} className={`small ghost ${dias === d ? "ativo" : ""}`} onClick={() => setDias(d)}>{d < 365 ? `${d}d` : `${d / 365} ano${d > 365 ? "s" : ""}`}</button>
+                ))}
                 <button onClick={backtest} disabled={btLoading}>{btLoading ? "Buscando histórico…" : "Rodar backtest"}</button>
               </div>
-            ) : <p className="muted">Selecione uma pool no Explorador para rodar o backtest com candles diários reais.</p>}
+            ) : <p className="muted">Selecione uma pool no Explorador (botão “Simular”) para rodar o backtest com histórico real.</p>}
+            {pool ? <p className="muted pequeno">Até 41 dias: velas de 1 hora (preço e volume reais). Até ~6 meses: velas diárias reais. Mais que isso: preço real da DefiLlama e volume estimado pela média do período real.</p> : null}
             {btErro ? <p className="erro">{btErro}</p> : null}
             {bt ? (
               <>
@@ -153,9 +160,16 @@ export default function Simulator({ pool }: { pool: Pool | null }) {
                   <div className="card"><span>Valor final da posição</span><strong>{fmtUsd(bt.finalValueUsd)}</strong></div>
                   <div className="card"><span>vs. só segurar (HODL)</span><strong className={bt.ilPct < 0 ? "neg" : "pos"}>{fmtPct(bt.ilPct)}</strong></div>
                   <div className="card"><span>Resultado total</span><strong className={bt.pnlUsd >= 0 ? "pos" : "neg"}>{fmtUsd(bt.pnlUsd)}</strong></div>
-                  <div className="card"><span>Dias na faixa</span><strong>{bt.daysInRange}/{bt.days}</strong></div>
+                  <div className="card"><span>Tempo na faixa</span><strong>{fmtNum(bt.daysInRange, 3)}/{fmtNum(bt.days, 4)} dias ({fmtPct(bt.daysInRange / bt.days, 0)})</strong></div>
                   <div className="card"><span>APR taxas realizado</span><strong>{fmtPct(bt.aprFees, 1)}</strong></div>
                 </div>
+                {hist ? (
+                  <p className="muted pequeno">
+                    Período analisado: {new Date(hist.inicio * 1000).toLocaleDateString("pt-BR")} até hoje · {hist.candles.length.toLocaleString("pt-BR")} velas de 1 {hist.intervalo}
+                    {hist.diasEstimados > 0 ? <> · <span className="alerta">{hist.diasEstimados} dias com volume estimado</span> ({hist.diasReais} com volume real)</> : null}
+                    {bt.days + 1 < dias ? <> · <span className="alerta">a pool/token não tem histórico para os {dias} dias pedidos; usei todo o disponível</span></> : null}
+                  </p>
+                ) : null}
                 <Chart bt={bt} pa={pa} pb={pb} />
                 <p className="nota">Faixa fixa centrada no preço de HOJE aplicada ao período. Participação aproximada por capital × eficiência ÷ TVL atual. Serve para comparar faixas, não como promessa de retorno.</p>
               </>

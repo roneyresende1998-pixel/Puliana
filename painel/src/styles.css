@@ -88,3 +88,4 @@ button.link.x { color: var(--muted); margin-left: 6px; font-size: 11px; }
 button.link.x:hover { color: var(--neg); }
 .walletbar .addr { display: inline-flex; align-items: center; }
 optgroup { color: var(--muted); }
+.dias { width: 90px; } .small.ativo { border-color: var(--acento); color: var(--txt); }

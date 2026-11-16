@@ -52,10 +52,12 @@ export function runBacktest(i: BacktestInput): BacktestResult {
   const pEnd = i.candles[i.candles.length - 1].close;
   const finalValueUsd = valueAt(L, pEnd, i.pa, i.pb) * i.quoteUsd;
   const hodlValueUsd = (ini.x * pEnd + ini.y) * i.quoteUsd;
-  const days = i.candles.length;
+  // Período real coberto (funciona com velas de hora ou de dia)
+  const passo = i.candles.length > 1 ? i.candles[1].t - i.candles[0].t : 86_400;
+  const days = (i.candles[i.candles.length - 1].t - i.candles[0].t + passo) / 86_400;
   return {
     days,
-    daysInRange: inRangeDays,
+    daysInRange: (inRangeDays / i.candles.length) * days,
     feesUsd: fees,
     finalValueUsd,
     hodlValueUsd,
