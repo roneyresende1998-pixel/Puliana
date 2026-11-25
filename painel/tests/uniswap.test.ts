@@ -64,3 +64,21 @@ test("multicall ownerOf: codifica e decodifica lotes (inclusive NFT queimado)", 
   const resp = "0x" + W(32) + W(2) + W(64) + W(64 + item1.length / 2) + item1 + item2;
   assert.deepEqual(decodeOwnerOfBatch(resp, 2), ["0x" + A, null]);
 });
+
+import { ethCall } from "../src/lib/rpc.ts";
+import { chainByKey as cbk } from "../src/lib/chains.ts";
+test("RPC: cai para o nó reserva se o principal falhar, mas não em revert", async () => {
+  const chamados: string[] = [];
+  globalThis.fetch = (async (u: string) => {
+    chamados.push(String(u));
+    if (String(u).includes("publicnode")) return new Response("bloqueado", { status: 403 });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x01" }));
+  }) as typeof fetch;
+  assert.equal(await ethCall(cbk("bsc"), "0x0000000000000000000000000000000000000001", "0x"), "0x01");
+  assert.ok(chamados[0].includes("publicnode") && chamados[1].includes("drpc"));
+  // revert é resposta legítima: não tenta outro nó
+  chamados.length = 0;
+  globalThis.fetch = (async (u: string) => { chamados.push(String(u)); return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, error: { message: "execution reverted" } })); }) as typeof fetch;
+  await assert.rejects(ethCall(cbk("eth"), "0x0000000000000000000000000000000000000001", "0x"), /revert/);
+  assert.equal(chamados.length, 1);
+});

@@ -1,6 +1,6 @@
 # Netlify / Cloudflare Pages — cabeçalhos de segurança
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://coin-images.coingecko.com https://assets.geckoterminal.com; font-src 'self'; connect-src 'self' https://api.geckoterminal.com https://*.publicnode.com https://coins.llama.fi https://yields.llama.fi https://api.coingecko.com; base-uri 'none'; form-action 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://coin-images.coingecko.com https://assets.geckoterminal.com; font-src 'self'; connect-src 'self' https://api.geckoterminal.com https://*.publicnode.com https://*.drpc.org https://coins.llama.fi https://yields.llama.fi https://api.coingecko.com; base-uri 'none'; form-action 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests; frame-ancestors 'none'
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer

@@ -58,6 +58,8 @@ export const V3_PROTOCOLS: V3Protocol[] = [
   { chain: "optimism", nome: "SushiSwap v3", kind: "v3", positionManager: "0x1af415a1eba07a4986a52b6f2e7de7003d82231e", manage: sushi },
   // Slipstream
   { chain: "base", nome: "Aerodrome", kind: "slipstream", positionManager: "0x827922686190790b37229fd06084350e74485b72", manage: () => "https://aerodrome.finance/dash" },
+  // Segundo gerenciador da Aerodrome (fábrica nova, pools criadas a partir de 2025)
+  { chain: "base", nome: "Aerodrome", kind: "slipstream", positionManager: "0xa990c6a764b73bf43cee5bb40339c3322fb9d55f", manage: () => "https://aerodrome.finance/dash" },
   { chain: "optimism", nome: "Velodrome", kind: "slipstream", positionManager: "0x416b433906b1b72fa758e166e239c43d68dc6f29", manage: () => "https://velodrome.finance/dash" },
 ];
 

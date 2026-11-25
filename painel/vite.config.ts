@@ -11,7 +11,7 @@ export const CSP = [
   "style-src 'self'",
   "img-src 'self' data: https://coin-images.coingecko.com https://assets.geckoterminal.com",
   "font-src 'self'",
-  "connect-src 'self' https://api.geckoterminal.com https://*.publicnode.com https://coins.llama.fi https://yields.llama.fi https://api.coingecko.com",
+  "connect-src 'self' https://api.geckoterminal.com https://*.publicnode.com https://*.drpc.org https://coins.llama.fi https://yields.llama.fi https://api.coingecko.com",
   "base-uri 'none'",
   "form-action 'none'",
   "object-src 'none'",

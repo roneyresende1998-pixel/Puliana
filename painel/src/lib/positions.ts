@@ -27,4 +27,8 @@ export type LpPosition = {
   explorerUrl?: string;
   /** endereço do token0/1 para buscar preço (rede no GeckoTerminal) */
   gecko: string;
+  /** posição depositada em farm/gauge (o NFT não está na carteira) */
+  staked?: string;
+  /** recompensas pendentes da farm/gauge (CAKE, AERO, VELO…) */
+  rewards?: { symbol: string; address: string; amount: number }[];
 };

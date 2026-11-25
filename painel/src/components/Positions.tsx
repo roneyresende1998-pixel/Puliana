@@ -9,7 +9,7 @@ import { scanAddress, type ScanResult, type SourceStatus } from "../lib/scanner.
 import { isSuspicious, safeSymbol } from "../lib/spam.ts";
 import type { Wallet } from "./WalletBar.tsx";
 
-type Row = LpPosition & { wallet: string; valueUsd: number | null; feesUsd: number | null; suspeita: boolean };
+type Row = LpPosition & { wallet: string; valueUsd: number | null; feesUsd: number | null; rewardsUsd: number | null; suspeita: boolean };
 type V4Id = { chain: string; id: string };
 
 /** Moeda nativa (endereço zero na v4) → token embrulhado, para buscar dados. */
@@ -52,20 +52,27 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
         const r = await scanAddress(w.address, { includeClosed: fechadas, v4Ids, onProgress: (m) => atual() && setProgresso(m) });
         st.push(...r.status.map((s) => ({ ...s, wallet: w.address })));
         v4c.push(...r.v4Counts.map((c) => ({ ...c, wallet: w.address })));
-        all.push(...r.positions.map((p) => ({ ...p, wallet: w.address, valueUsd: null, feesUsd: null, suspeita: isSuspicious(p.token0.symbol) || isSuspicious(p.token1.symbol) })));
+        all.push(...r.positions.map((p) => ({ ...p, wallet: w.address, valueUsd: null, feesUsd: null, rewardsUsd: null, suspeita: isSuspicious(p.token0.symbol) || isSuspicious(p.token1.symbol) })));
       } catch (e) {
         st.push({ fonte: "Carteira", ok: false, qtd: 0, erro: (e as Error).message, wallet: w.address });
       }
     }));
     if (!atual()) return;
     setProgresso("Buscando preços…");
-    const prices = await fetchPrices(all.flatMap((p) => [{ chainKey: p.chainKey, address: p.token0.address }, { chainKey: p.chainKey, address: p.token1.address }]));
+    const prices = await fetchPrices(all.flatMap((p) => [
+      { chainKey: p.chainKey, address: p.token0.address }, { chainKey: p.chainKey, address: p.token1.address },
+      ...(p.rewards ?? []).map((x) => ({ chainKey: p.chainKey, address: x.address })),
+    ]));
     for (const r of all) {
       const a = prices.get(`${r.chainKey}:${r.token0.address.toLowerCase()}`);
       const b = prices.get(`${r.chainKey}:${r.token1.address.toLowerCase()}`);
       if (a !== undefined && b !== undefined && !r.suspeita) {
         r.valueUsd = r.amount0 * a + r.amount1 * b;
         r.feesUsd = r.fees0 * a + r.fees1 * b;
+      }
+      if (r.rewards?.length && !r.suspeita) {
+        const vals = r.rewards.map((x) => { const pr = prices.get(`${r.chainKey}:${x.address.toLowerCase()}`); return pr === undefined ? null : x.amount * pr; });
+        r.rewardsUsd = vals.some((v) => v === null) ? null : vals.reduce((s2: number, v) => s2 + (v ?? 0), 0);
       }
     }
     if (!atual()) return;
@@ -104,6 +111,8 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
   const validas = lista.filter((r) => !r.suspeita);
   const total = validas.reduce((s, r) => s + (r.valueUsd ?? 0), 0);
   const totalFees = validas.reduce((s, r) => s + (r.feesUsd ?? 0), 0);
+  const totalRewards = validas.reduce((s, r) => s + (r.rewardsUsd ?? 0), 0);
+  const emStake = validas.filter((r) => r.staked && !r.closed).length;
   const ativas = validas.filter((r) => !r.closed);
   const dentro = ativas.filter((r) => r.inRange).length;
   const semPreco = validas.some((r) => r.valueUsd === null);
@@ -137,6 +146,7 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
       <div className="cards resumo">
         <div className="card"><span>Valor em posições</span><strong>{fmtUsd(total)}{semPreco ? "*" : ""}</strong></div>
         <div className="card"><span>Taxas não coletadas</span><strong className="pos">{fmtUsd(totalFees)}</strong></div>
+        {emStake || totalRewards > 0 ? <div className="card"><span>Recompensas de farm/gauge ({emStake} em stake)</span><strong className="pos">{fmtUsd(totalRewards)}</strong></div> : null}
         <div className="card"><span>Posições ativas</span><strong>{ativas.length}</strong></div>
         <div className="card"><span>Dentro da faixa</span><strong className={dentro === ativas.length ? "pos" : "alerta"}>{dentro}/{ativas.length}</strong></div>
       </div>
@@ -168,6 +178,7 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
                 {r.fee !== null ? <span className="badge">{fmtPct(r.fee, r.fee < 0.0005 ? 3 : 2)}</span> : null}
                 <span className="badge">{r.protocol}</span>
                 <span className="badge">{r.chainName}</span>
+                {r.staked ? <span className="badge ok" title="O NFT está depositado na farm/gauge, não na carteira">🔒 {r.staked}</span> : null}
                 {r.closed ? <span className="badge">Fechada</span> : r.inRange ? <span className="badge ok">Na faixa</span> : <span className="badge warn">Fora da faixa</span>}
               </header>
               {r.suspeita ? <p className="erro pequeno">⚠️ Token suspeito (nome com link/convite). Provável golpe de airdrop: NÃO visite sites citados nem assine nada. Fora do total.</p> : null}
@@ -182,6 +193,7 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
                 <dt>Composição</dt><dd>{fmtNum(r.amount0)} {s0} + {fmtNum(r.amount1)} {s1}</dd>
                 <dt>Taxas a coletar{r.feesApprox ? "*" : ""}</dt>
                 <dd className="pos">{r.feesUsd === null ? "" : fmtUsd(r.feesUsd) + " · "}{fmtNum(r.fees0)} {s0} + {fmtNum(r.fees1)} {s1}</dd>
+                {r.rewards?.length ? <><dt>Recompensa a coletar</dt><dd className="pos">{r.rewardsUsd !== null ? fmtUsd(r.rewardsUsd) + " · " : ""}{r.rewards.map((x) => `${fmtNum(x.amount)} ${x.symbol}`).join(" + ")}</dd></> : null}
                 {wallets.length > 1 ? <><dt>Carteira</dt><dd>{shortAddr(r.wallet)}</dd></> : null}
                 <dt>ID</dt><dd title={r.id}>{r.id.length > 14 ? shortAddr(r.id) : "#" + r.id}</dd>
               </dl>
@@ -204,7 +216,7 @@ export default function Positions({ wallets }: { wallets: Wallet[] }) {
           {status.map((s, i) => <tr key={i}><td>{s.fonte}</td><td className="muted">{shortAddr(s.wallet)}</td><td className="num">{s.qtd}</td><td className={s.ok ? "pos" : "neg"}>{s.ok ? "ok" : s.erro}</td></tr>)}
         </tbody></table></div>
       ) : null}
-      <p className="nota">Ainda não lidas: posições "em stake" (NFT depositado em gauge/farm da Aerodrome, Velodrome ou PancakeSwap, que sai da sua carteira), Orca "position bundles" e pools comuns não concentradas (v2).</p>
+      <p className="nota">Também lidas: posições em stake nas farms da PancakeSwap (5 redes) e nos gauges da Aerodrome e Velodrome. Em gauge, as taxas de negociação vão para os eleitores e você recebe AERO/VELO. Ainda não lidas: Orca "position bundles", pools comuns não concentradas (v2) e cofres automáticos de terceiros.</p>
     </section>
   );
 }

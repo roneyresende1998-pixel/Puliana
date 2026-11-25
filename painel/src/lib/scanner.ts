@@ -10,6 +10,7 @@ import { loadOrcaPositions } from "./solana/orca.ts";
 import { loadRaydiumPositions } from "./solana/raydium.ts";
 import { loadProtocolPositions } from "./uniswap.ts";
 import { V4, countV4, lerV4Cache, loadV4Position, scanV4Owners } from "./uniswapV4.ts";
+import { PANCAKE_FARMS, VOTERS, loadGaugeStaked, loadPancakeFarm } from "./staked.ts";
 
 export type SourceStatus = { fonte: string; ok: boolean; qtd: number; erro?: string };
 export type ScanResult = { positions: LpPosition[]; status: SourceStatus[]; v4Counts: { chain: string; nome: string; count: number; achados: number; buscaCompleta: boolean }[] };
@@ -68,8 +69,14 @@ export async function scanAddress(
       }
       return out;
     });
-    opts.onProgress?.(`Lendo ${tasks.length + 1} protocolos em ${EVM_CHAINS.length} redes…`);
-    const res = await Promise.all([...tasks, v4Task]);
+    // Posições em stake (o NFT não está na carteira)
+    const nomeRede = (k: string) => EVM_CHAINS.find((c) => c.key === k)!.nome;
+    const stakeTasks = [
+      ...Object.keys(PANCAKE_FARMS).map((k) => run(`Farm PancakeSwap · ${nomeRede(k)}`, status, () => loadPancakeFarm(k, address, opts.includeClosed))),
+      ...VOTERS.map((v) => run(`Gauges ${v.nome} · ${nomeRede(v.chain)}`, status, () => loadGaugeStaked(v.chain, address, opts.includeClosed))),
+    ];
+    opts.onProgress?.(`Lendo ${tasks.length + stakeTasks.length + 1} fontes em ${EVM_CHAINS.length} redes…`);
+    const res = await Promise.all([...tasks, ...stakeTasks, v4Task]);
     positions = res.flat();
   } else if (kind === "solana") {
     opts.onProgress?.("Lendo NFTs da carteira Solana…");

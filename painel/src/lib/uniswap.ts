@@ -97,7 +97,7 @@ export async function loadPosition(proto: V3Protocol, owner: string, tokenId: bi
   const sqrtP = Number(sqrtPriceX96) / 2 ** 96;
   const { a0, a1 } = amountsFromSqrt(Number(liquidity), sqrtP, tickLower, tickUpper);
   return {
-    key: `${proto.nome}:${chain.key}:${tokenId}`,
+    key: `${proto.nome}:${chain.key}:${proto.positionManager.slice(0, 8)}:${tokenId}`,
     id: tokenId.toString(),
     chainKey: chain.key,
     chainName: chain.nome,
